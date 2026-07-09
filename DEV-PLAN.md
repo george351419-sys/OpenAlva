@@ -1,6 +1,6 @@
 # OpenAlva - DEV Plan
 
-> 版本：v1.0（2026-07-09）｜当前进度：**Phase 0 完成（commit f5325e5，2026-07-09），下一步 Phase 1**
+> 版本：v1.0（2026-07-09）｜当前进度：**Phase 1 完成（2026-07-10），下一步 Phase 2**
 > 上游文档：`Product-Spec.md`（功能与范围）、`Design-Brief.md`（视觉裁决）、`逆向材料/Alva系统架构综合.md`（平台行为）、`Portfolio-Watch-Skill/AGENTS.md` §5（实战坑）。
 > 每个 Phase 内任务可独立验证；Phase 完成 = 验收命令通过 + 两阶段 review 通过 + 原子提交。
 
@@ -32,6 +32,8 @@
 5. 通知 fanout 按记录 `date` 去重；notify 行用 `Date.now()` 而非业务 `as_of`。
 6. 时间戳差异如实保留：美股 kline `time_close` Unix 秒、crypto ISO 字符串（适配器不做"贴心"归一，blueprint 依赖原样）。
 7. 沙箱模块白名单：`net/http`（undici 包装，签名兼容 `http.fetch/get`）、`secret-manager`（`loadPlaintext`）、`@alva/feed`；超时/内存上限可配。
+
+**Phase 1 隔离信任决定（2026-07-10 审查后登记）**：feed 执行采用进程内 vm 上下文而非 worker/子进程。已加固：`codeGeneration:false` 封死沙箱内直接的 eval/new Function（纵深防御）、超时定时器正确清理、同进程 runFeed 全局串行化、secret 值对 logs/封套脱敏、rows.json/@kv 进程内文件锁。**明确接受的剩余风险（已被测试实证并锁定，防回归误判）**：vm 不是安全边界——`this.constructor.constructor(...)` / `require.constructor(...)` 经宿主对象原型链够到宿主 realm 的 Function 构造器仍可逃逸到 `process`；失控同步循环无法被超时中断；跨进程（CLI 与 server 同时写同一 feed）无锁。理由：单机自用，feed 代码由用户自己的 agent 生成，视为可信。**根治=Phase 3 前置项：升级为子进程/worker 隔离**，`runFeed` API 保持不变。
 
 ## 2. Phase 0 — 工程基座（0.5 天）
 

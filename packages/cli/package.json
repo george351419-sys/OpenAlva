@@ -1,0 +1,14 @@
+{
+  "name": "@openalva/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/dispatch.ts"
+  },
+  "dependencies": {
+    "@openalva/alfs": "workspace:*",
+    "@openalva/feed-runtime": "workspace:*",
+    "@openalva/scheduler": "workspace:*"
+  }
+}

@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm lint && pnpm test",
-    "dev:server": "pnpm --filter @openalva/server dev"
+    "dev:server": "pnpm --filter @openalva/server dev",
+    "openalva": "tsx packages/cli/src/cli.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -21,6 +22,7 @@
     "eslint": "^9.28.0",
     "eslint-config-prettier": "^10.1.5",
     "prettier": "^3.5.3",
+    "tsx": "^4.23.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.33.1",
     "vitest": "^3.2.1"
