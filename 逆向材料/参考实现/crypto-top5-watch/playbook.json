@@ -1,0 +1,92 @@
+{
+  "playbook_id": 8472,
+  "owner_uid": "2073703092013924352",
+  "type": "dashboard",
+  "name": "crypto-top5-watch",
+  "display_name": "Crypto Top 5 Watch",
+  "description": "Crypto-only Portfolio Watch for the current top five non-stablecoin assets, with 10-day anomaly history and quiet future P0/P1 alerts.",
+  "created_at": "2026-07-07T04:40:07Z",
+  "updated_at": "2026-07-09T13:12:08Z",
+  "draft": {
+    "playbook_version_id": 42978,
+    "updated_at": "2026-07-07T04:40:07Z",
+    "feeds": [
+      {
+        "feed_id": 14237,
+        "feed_name": "crypto-top5-watch",
+        "feed_major": 1
+      }
+    ]
+  },
+  "releases": [
+    {
+      "version": "v1.0.0",
+      "playbook_version_id": 42979,
+      "created_at": "2026-07-07T04:40:15Z",
+      "feeds": [
+        {
+          "feed_id": 14237,
+          "feed_name": "crypto-top5-watch",
+          "feed_major": 1
+        }
+      ],
+      "changelog": "Initial crypto-only Portfolio Watch monitor with hourly quiet alerts and 10-day anomaly history.",
+      "layout_html": "https://george351419.playbook.alva.ai/crypto-top5-watch/v1.0.0/index.html"
+    }
+  ],
+  "readme_url": "/alva/home/george351419/playbooks/crypto-top5-watch/README.md",
+  "metadata": {
+    "trading_pairs": [
+      {
+        "base": "BTC",
+        "type": "",
+        "quote": "USD",
+        "symbol": "US_SPOT_BTC_USD",
+        "exchange": "US",
+        "fee_rate": 0,
+        "description": "",
+        "symbol_icon_url": ""
+      },
+      {
+        "base": "ETH",
+        "type": "",
+        "quote": "USD",
+        "symbol": "US_SPOT_ETH_USD",
+        "exchange": "US",
+        "fee_rate": 0,
+        "description": "",
+        "symbol_icon_url": ""
+      },
+      {
+        "base": "BNB",
+        "type": "crypto-spot",
+        "quote": "USDT",
+        "symbol": "BINANCE_SPOT_BNB_USDT",
+        "exchange": "BINANCE",
+        "fee_rate": 0.001,
+        "description": "",
+        "symbol_icon_url": "https://public.rootdata.com/images/b16/1666362080433.jpg"
+      },
+      {
+        "base": "XRP",
+        "type": "crypto-spot",
+        "quote": "USDT",
+        "symbol": "BINANCE_SPOT_XRP_USDT",
+        "exchange": "BINANCE",
+        "fee_rate": 0.001,
+        "description": "",
+        "symbol_icon_url": "https://public.rootdata.com/images/b6/1744944165097.jpg"
+      },
+      {
+        "base": "SOL",
+        "type": "crypto-spot",
+        "quote": "USDT",
+        "symbol": "BINANCE_SPOT_SOL_USDT",
+        "exchange": "BINANCE",
+        "fee_rate": 0.001,
+        "description": "",
+        "symbol_icon_url": "https://public.rootdata.com/images/b15/1666364340995.jpg"
+      }
+    ]
+  }
+}

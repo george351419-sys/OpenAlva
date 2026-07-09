@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Crypto Top 5 Watch</title>
+  <link rel="stylesheet" href="https://alva-ai-static.b-cdn.net/design-system/v1/design-system.css" />
+  <script src="https://unpkg.com/@alva-ai/toolkit/dist/browser.global.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <style>
+    html {
+      height: 100%;
+      overflow: hidden;
+    }
+    body {
+      height: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
+      margin: 0;
+      background: var(--b0-page);
+      color: var(--text-n9);
+    }
+    .playbook-container {
+      width: 100%;
+      margin: 0 auto;
+      padding: var(--spacing-s) var(--spacing-xxl) var(--spacing-xxxxl);
+    }
+    .tab-bar-wrapper {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--b0-page);
+      padding: var(--spacing-xs) 0 var(--spacing-m);
+    }
+    .tab-bar {
+      display: flex;
+      gap: var(--spacing-xs);
+      flex-wrap: wrap;
+    }
+    .tab-button {
+      border: 0;
+      border-radius: var(--radius-ct-s);
+      padding: var(--spacing-xs) var(--spacing-m);
+      background: transparent;
+      color: var(--text-n7);
+      font: inherit;
+      font-size: 14px;
+      line-height: 22px;
+      cursor: pointer;
+    }
+    .tab-button.is-active {
+      background: var(--grey-g01);
+      color: var(--main-m1);
+    }
+    .tab-panel {
+      display: none;
+    }
+    .tab-panel.is-active {
+      display: block;
+    }
+    .widget-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: var(--spacing-xl);
+      align-items: stretch;
+    }
+    .col-2 { grid-column: span 2; }
+    .col-3 { grid-column: span 3; }
+    .col-4 { grid-column: span 4; }
+    .col-5 { grid-column: span 5; }
+    .col-8 { grid-column: span 8; }
+    .widget-card {
+      background: transparent;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: visible;
+    }
+    .widget-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--spacing-s);
+      margin-bottom: var(--spacing-m);
+    }
+    .widget-title-text {
+      font-size: 16px;
+      font-weight: 400;
+      color: var(--text-n9);
+      line-height: 26px;
+    }
+    .widget-timestamp {
+      font-size: 12px;
+      color: var(--text-n5);
+      line-height: 20px;
+      text-align: right;
+    }
+    .metric-body,
+    .text-body,
+    .pw-feed-body,
+    .table-body {
+      background: var(--grey-g01);
+      border-radius: var(--radius-ct-s);
+      padding: var(--spacing-l);
+    }
+    .pw-chart-body {
+      border-radius: var(--radius-ct-s);
+      min-height: 360px;
+      background:
+        radial-gradient(circle at 1px 1px, var(--line-l12) 1px, transparent 0) 0 0 / 12px 12px,
+        var(--grey-g01);
+      padding: var(--spacing-l);
+      position: relative;
+    }
+    .chart {
+      width: 100%;
+      height: 320px;
+      min-height: 240px;
+    }
+    .alva-watermark {
+      position: absolute;
+      right: var(--spacing-m);
+      bottom: var(--spacing-m);
+      opacity: 0.2;
+      line-height: 0;
+      width: 72px;
+      height: auto;
+    }
+    .metric-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--spacing-m);
+    }
+    .metric {
+      flex: 1 1 120px;
+      min-width: 120px;
+    }
+    .metric-label {
+      color: var(--text-n5);
+      font-size: 12px;
+      line-height: 20px;
+    }
+    .metric-value {
+      margin-top: var(--spacing-xxs);
+      color: var(--text-n9);
+      font-size: 24px;
+      line-height: 32px;
+      font-weight: 400;
+    }
+    .metric-sub {
+      margin-top: var(--spacing-xxs);
+      color: var(--text-n5);
+      font-size: 12px;
+      line-height: 20px;
+    }
+    .asset-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--spacing-s);
+    }
+    .asset-chip {
+      flex: 1 1 160px;
+      min-width: 150px;
+      border-radius: var(--radius-ct-s);
+      background: var(--b0-container);
+      padding: var(--spacing-m);
+    }
+    .asset-top {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--spacing-s);
+      color: var(--text-n5);
+      font-size: 12px;
+      line-height: 20px;
+    }
+    .asset-symbol {
+      color: var(--text-n9);
+      font-size: 18px;
+      line-height: 28px;
+      margin-top: var(--spacing-xxs);
+    }
+    .asset-stats {
+      color: var(--text-n7);
+      font-size: 12px;
+      line-height: 20px;
+      margin-top: var(--spacing-xs);
+    }
+    .table-scroll {
+      width: 100%;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+    th, td {
+      padding: var(--spacing-s) var(--spacing-xs);
+      text-align: left;
+      font-size: 13px;
+      line-height: 21px;
+      border-bottom: 0.5px solid var(--line-l12);
+      vertical-align: top;
+    }
+    th {
+      color: var(--text-n5);
+      font-weight: 400;
+    }
+    td {
+      color: var(--text-n7);
+    }
+    .tier {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 34px;
+      border-radius: var(--radius-ct-min);
+      padding: 2px var(--spacing-xs);
+      font-size: 12px;
+      line-height: 18px;
+      background: var(--b0-container);
+      color: var(--text-n7);
+    }
+    .tier.p0 { color: var(--main-m4); }
+    .tier.p1 { color: var(--main-m5); }
+    .tier.p2 { color: var(--main-m3); }
+    .signal-card {
+      border-radius: var(--radius-ct-s);
+      background: var(--b0-container);
+      padding: var(--spacing-m);
+      margin-bottom: var(--spacing-s);
+    }
+    .signal-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--spacing-m);
+      margin-bottom: var(--spacing-xs);
+    }
+    .signal-title {
+      color: var(--text-n9);
+      font-size: 15px;
+      line-height: 24px;
+    }
+    .signal-meta {
+      color: var(--text-n5);
+      font-size: 12px;
+      line-height: 20px;
+    }
+    .signal-copy {
+      color: var(--text-n7);
+      font-size: 13px;
+      line-height: 22px;
+      white-space: pre-wrap;
+    }
+    .paragraph {
+      color: var(--text-n7);
+      font-size: 14px;
+      line-height: 24px;
+      margin: 0 0 var(--spacing-m);
+    }
+    .formula {
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--text-n7);
+      background: var(--b0-container);
+      border-radius: var(--radius-ct-s);
+      padding: var(--spacing-m);
+      overflow-x: auto;
+      font-size: 12px;
+      line-height: 20px;
+      margin-bottom: var(--spacing-m);
+    }
+    .state {
+      color: var(--text-n5);
+      font-size: 13px;
+      line-height: 22px;
+      padding: var(--spacing-l);
+      background: var(--grey-g01);
+      border-radius: var(--radius-ct-s);
+    }
+    @media (max-width: 768px) {
+      .playbook-container {
+        padding: var(--spacing-m);
+      }
+      .widget-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: var(--spacing-l);
+      }
+      .col-2, .col-3, .col-4, .col-5, .col-8 {
+        grid-column: span 4;
+      }
+    .pw-chart-body {
+        min-height: 320px;
+      }
+      .chart {
+        height: 280px;
+      }
+      .widget-title {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .widget-timestamp {
+        text-align: left;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="playbook-container">
+    <div class="tab-bar-wrapper">
+      <div class="tab-bar" role="tablist" aria-label="Portfolio Watch tabs">
+        <button class="btn btn-secondary btn-small tab-button is-active" data-tab="watch" role="tab" aria-selected="true">Watch 监控</button>
+        <button class="btn btn-secondary btn-small tab-button" data-tab="incident" role="tab" aria-selected="false">Incident 事件</button>
+        <button class="btn btn-secondary btn-small tab-button" data-tab="theory" role="tab" aria-selected="false">Theory 逻辑</button>
+        <button class="btn btn-secondary btn-small tab-button" data-tab="formulas" role="tab" aria-selected="false">Formulas 公式</button>
+      </div>
+    </div>
+
+    <section id="watch" class="tab-panel is-active" role="tabpanel">
+      <div id="loading" class="state">Loading live monitor...</div>
+      <div id="watch-content" class="widget-grid" style="display:none">
+        <section class="widget-card col-8">
+          <div class="widget-title">
+            <div class="widget-title-text">监控概览</div>
+            <div class="widget-timestamp" id="freshness"></div>
+          </div>
+          <div class="metric-body">
+            <div class="metric-row" id="overview-metrics"></div>
+          </div>
+        </section>
+
+        <section class="widget-card col-8">
+          <div class="widget-title">
+            <div class="widget-title-text">当前前 5 大非稳定币资产</div>
+            <div class="widget-timestamp" id="policy"></div>
+          </div>
+          <div class="metric-body">
+            <div class="asset-strip" id="asset-strip"></div>
+          </div>
+        </section>
+
+        <section class="widget-card col-5">
+          <div class="widget-title">
+            <div class="widget-title-text">10 天警戒时间线</div>
+            <div class="widget-timestamp">残差 vs BTC beta · crypto 阈值 ×1.25</div>
+          </div>
+          <div class="pw-chart-body">
+            <div id="timeline-chart" class="chart"></div>
+            <img class="alva-watermark" src="https://alva-ai-static.b-cdn.net/logo/alva_watermark.svg" alt="Alva" />
+          </div>
+        </section>
+
+        <section class="widget-card col-3">
+          <div class="widget-title">
+            <div class="widget-title-text">异动队列</div>
+            <div class="widget-timestamp" id="incident-count"></div>
+          </div>
+          <div class="pw-feed-body" id="signal-feed"></div>
+        </section>
+
+        <section class="widget-card col-8">
+          <div class="widget-title">
+            <div class="widget-title-text">资产明细</div>
+            <div class="widget-timestamp">价格、成交、funding、OI、exchange flow</div>
+          </div>
+          <div class="table-body">
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>资产</th>
+                    <th>10日</th>
+                    <th>最新日</th>
+                    <th>残差σ</th>
+                    <th>RVOL</th>
+                    <th>Funding</th>
+                    <th>OI 24h</th>
+                    <th>覆盖</th>
+                  </tr>
+                </thead>
+                <tbody id="asset-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="incident" class="tab-panel" role="tabpanel">
+      <div class="widget-grid">
+        <section class="widget-card col-8">
+          <div class="widget-title">
+            <div class="widget-title-text">当前最高优先级事件</div>
+            <div class="widget-timestamp">同一资产多信号会合并成一条事件</div>
+          </div>
+          <div class="pw-feed-body" id="incident-detail"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="theory" class="tab-panel" role="tabpanel">
+      <div class="widget-grid">
+        <section class="widget-card col-8">
+          <div class="widget-title">
+            <div class="widget-title-text">监控逻辑</div>
+            <div class="widget-timestamp">Portfolio Watch 方法</div>
+          </div>
+          <div class="text-body">
+            <p class="paragraph">这个监控把“前 5 大虚拟货币投资标的”定义为最新市值排名前五的非稳定币 crypto 资产。稳定币被剔除，因为它们主要是结算/流动性资产，不适合用价格波动做投资异动提醒。</p>
+            <p class="paragraph">BTC 是组合基准。BTC 本身用自己的波动基线打分；ETH、BNB、XRP、SOL 等资产先回归到 BTC，再看残差。这样能把“整个 crypto beta 一起动”的噪音降级，把真正偏离基准的资产排到前面。</p>
+            <p class="paragraph">推送默认很严格：历史 10 天只展示不补发；未来只有新的 P0/P1、并且通过成交量、OI/funding 或可信催化剂确认，才会进入通知。普通 P2 只留在界面里。</p>
+            <p class="paragraph">新闻只作为确认项，不作为价格事实来源；单条旧新闻、泛市场评论和小幅日常波动不会触发推送。</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="formulas" class="tab-panel" role="tabpanel">
+      <div class="widget-grid">
+        <section class="widget-card col-8">
+          <div class="widget-title">
+            <div class="widget-title-text">核心公式</div>
+            <div class="widget-timestamp">可审计阈值</div>
+          </div>
+          <div class="text-body">
+            <pre class="formula">r_i,t = ln(close_i,t / close_i,t-1)
+
+sigma_ewma = sqrt(EWMA(lambda=0.94, r_i,t^2))
+sigma_mad  = 1.4826 * median(|r_i - median(r_i)|)
+
+For alts:
+r_i = alpha + beta * r_BTC + epsilon
+z_idio = epsilon_t / sigma_epsilon
+
+For BTC:
+z_idio = r_BTC,t / sigma_BTC</pre>
+            <pre class="formula">Crypto gate:
+k_surface = 2.0 * 1.25
+k_push    = 2.5 * 1.25
+k_force   = 3.5 * 1.25
+
+Unconfirmed crypto price moves are demoted one tier.
+P0/P1 push requires a new current signal plus confirmation.</pre>
+            <pre class="formula">score = floor(100 * clip(
+  0.30 * S +
+  0.25 * I +
+  0.15 * C +
+  0.10 * novelty +
+  0.20 * confluence -
+  0.40 * noise_penalty,
+  0, 1
+))
+
+S = 1 - exp(-abs(z_idio) / 1.5)
+I = min(abs(return) * equal_weight / 1%, 1)
+C rises with data freshness and RVOL confirmation</pre>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const FEED_ROOT = "/alva/home/george351419/feeds/crypto-top5-watch/v1/data";
+    let charts = [];
+    let appData = null;
+
+    function createAlvaClientConfig() {
+      const params = new URLSearchParams(window.location.search);
+      const pbsvToken = window.alva?.udf?.getViewerToken?.();
+      const apiOrigin = params.get("api_origin");
+      return {
+        ...(pbsvToken ? { pbsvToken } : {}),
+        ...(apiOrigin ? { baseUrl: apiOrigin.replace(/\/$/, "") } : {}),
+      };
+    }
+
+    function createAlvaClient() {
+      return new AlvaToolkit.AlvaClient(createAlvaClientConfig());
+    }
+
+    async function readAlfsJson(path) {
+      return createAlvaClient().fs.read({ path });
+    }
+
+    function parseMaybe(value, fallback) {
+      if (value === null || value === undefined || value === "") return fallback;
+      try {
+        return typeof value === "string" ? JSON.parse(value) : value;
+      } catch (_) {
+        return fallback;
+      }
+    }
+
+    function latestBatch(rows) {
+      if (!Array.isArray(rows) || !rows.length) return [];
+      const maxDate = Math.max(...rows.map((r) => Number(r.date || 0)));
+      return rows.filter((r) => Number(r.date || 0) === maxDate);
+    }
+
+    function fmtPct(x, digits = 2) {
+      const n = Number(x);
+      if (!Number.isFinite(n)) return "n/a";
+      return `${(n * 100).toFixed(digits)}%`;
+    }
+
+    function fmtMoney(x) {
+      const n = Number(x);
+      if (!Number.isFinite(n)) return "n/a";
+      if (Math.abs(n) >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+      if (Math.abs(n) >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+      if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+      return `$${n.toFixed(0)}`;
+    }
+
+    function fmtNum(x, digits = 2) {
+      const n = Number(x);
+      if (!Number.isFinite(n)) return "n/a";
+      return n.toFixed(digits);
+    }
+
+    function clsTier(tier) {
+      return String(tier || "").toLowerCase();
+    }
+
+    function metric(label, value, sub) {
+      return `<div class="metric"><div class="metric-label">${label}</div><div class="metric-value">${value}</div><div class="metric-sub">${sub || ""}</div></div>`;
+    }
+
+    function signalCard(sig) {
+      return `<article id="sig-${sig.signal_id}" class="signal-card">
+        <div class="signal-head">
+          <div>
+            <div class="signal-title">${sig.headline}</div>
+            <div class="signal-meta">${sig.symbol} · ${sig.event_time} · score ${fmtNum(sig.score, 0)} · ${fmtNum(sig.z_idio, 2)}σ</div>
+          </div>
+          <span class="tier ${clsTier(sig.tier)}">${sig.tier}</span>
+        </div>
+        <div class="signal-copy">${sig.evidence}</div>
+      </article>`;
+    }
+
+    async function loadData() {
+      const [overviewRows, assetRows, incidentRows, timelineRows] = await Promise.all([
+        readAlfsJson(`${FEED_ROOT}/watch/overview/@last/1`),
+        readAlfsJson(`${FEED_ROOT}/watch/assets/@last/50`),
+        readAlfsJson(`${FEED_ROOT}/watch/incidents/@last/200`),
+        readAlfsJson(`${FEED_ROOT}/watch/timeline/@last/400`),
+      ]);
+      const overview = Array.isArray(overviewRows) ? overviewRows[overviewRows.length - 1] : overviewRows;
+      const assets = latestBatch(assetRows);
+      const incidents = latestBatch(incidentRows).sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+      const timeline = latestBatch(timelineRows);
+      return { overview, assets, incidents, timeline };
+    }
+
+    function renderOverview(data) {
+      const overview = data.overview || {};
+      const counts = parseMaybe(overview.counts_json, {});
+      const freshness = parseMaybe(overview.freshness_json, {});
+      document.getElementById("freshness").textContent = `as of ${overview.as_of || ""} · latest daily bar ${freshness.daily_bars_latest || ""}`;
+      document.getElementById("policy").textContent = overview.inclusion_policy || "";
+      document.getElementById("incident-count").textContent = `${counts.total || 0} visible · P0 ${counts.P0 || 0} · P1 ${counts.P1 || 0} · P2 ${counts.P2 || 0}`;
+      document.getElementById("overview-metrics").innerHTML = [
+        metric("Universe", `${data.assets.length}`, "non-stablecoin top market-cap assets"),
+        metric("P0 / P1", `${counts.P0 || 0} / ${counts.P1 || 0}`, "push-eligible future tiers only"),
+        metric("10D Visible Warnings", `${counts.total || 0}`, "historical backfill is silent"),
+        metric("Latest Push", `${freshness.pushed_this_run || 0}`, "quiet run emits skip sentinel"),
+      ].join("");
+    }
+
+    function renderAssets(data) {
+      document.getElementById("asset-strip").innerHTML = data.assets.map((a) => `
+        <div class="asset-chip">
+          <div class="asset-top"><span>#${a.rank}</span><span>${fmtMoney(a.market_cap)}</span></div>
+          <div class="asset-symbol">${a.symbol}</div>
+          <div class="asset-stats">10日 ${fmtPct(a.ten_day_return)} · 最新日 ${fmtPct(a.daily_return)} · RVOL ${fmtNum(a.rvol_latest, 2)}x</div>
+        </div>
+      `).join("");
+      document.getElementById("asset-table").innerHTML = data.assets.map((a) => `
+        <tr>
+          <td>${a.symbol}<br><span class="signal-meta">${a.name}</span></td>
+          <td>${fmtPct(a.ten_day_return)}</td>
+          <td>${fmtPct(a.daily_return)}</td>
+          <td>${fmtPct(a.sigma_eps)}<br><span class="signal-meta">beta ${fmtNum(a.beta_btc, 2)}</span></td>
+          <td>${fmtNum(a.rvol_latest, 2)}x</td>
+          <td>${fmtPct(a.funding_latest, 4)}</td>
+          <td>${fmtPct(a.open_interest_change_24h)}</td>
+          <td>${a.capability_notes}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderSignals(data) {
+      const feed = document.getElementById("signal-feed");
+      feed.innerHTML = data.incidents.length ? data.incidents.map(signalCard).join("") : '<div class="state">过去 10 天没有通过异动门槛的事件。</div>';
+      const detail = document.getElementById("incident-detail");
+      if (!data.incidents.length) {
+        detail.innerHTML = '<div class="state">当前没有 P0/P1 事件；历史 P2 只在 Watch 中保留。</div>';
+        return;
+      }
+      const top = data.incidents[0];
+      detail.innerHTML = `<article class="signal-card" id="sig-${top.signal_id}">
+        <div class="signal-head">
+          <div>
+            <div class="signal-title">${top.headline}</div>
+            <div class="signal-meta">${top.symbol} · ${top.event_time} · ${top.timeframe} · score ${fmtNum(top.score, 0)}</div>
+          </div>
+          <span class="tier ${clsTier(top.tier)}">${top.tier}</span>
+        </div>
+        <p class="paragraph">${top.what_happened}</p>
+        <p class="paragraph">${top.why_it_matters}</p>
+        <div class="signal-copy">${top.evidence}</div>
+        <p class="paragraph">${top.noise_filters_checked}</p>
+      </article>`;
+    }
+
+    function renderChart(data) {
+      const el = document.getElementById("timeline-chart");
+      requestAnimationFrame(() => {
+        const chart = echarts.init(el);
+        charts.push(chart);
+        const days = [...new Set(data.timeline.map((r) => r.day))].sort();
+        const symbols = data.assets.map((a) => a.symbol);
+        const byKey = {};
+        data.timeline.forEach((r) => {
+          byKey[`${r.symbol}|${r.day}`] = r;
+        });
+        const series = symbols.map((symbol) => ({
+          name: symbol,
+          type: "line",
+          smooth: true,
+          symbolSize: 7,
+          data: days.map((day) => {
+            const r = byKey[`${symbol}|${day}`];
+            return r ? [day, Number(r.z_idio || 0), r.tier, r.headline] : [day, null, "", ""];
+          }),
+        }));
+        chart.setOption({
+          color: ["#49A3A6", "#C77D2A", "#6D7DD3", "#D65F5F", "#8AA05B"],
+          tooltip: {
+            trigger: "item",
+            formatter: (p) => `${p.seriesName}<br>${p.value[0]}<br>${fmtNum(p.value[1], 2)}σ · ${p.value[2]}`,
+          },
+          legend: { top: 0, type: "scroll", textStyle: { color: "var(--text-n7)" } },
+          grid: { left: 8, right: 12, top: 42, bottom: 28, containLabel: true },
+          xAxis: {
+            type: "time",
+            axisLabel: { hideOverlap: true, color: "var(--text-n5)" },
+            axisLine: { lineStyle: { color: "var(--line-l12)" } },
+          },
+          yAxis: {
+            type: "value",
+            name: "z_idio",
+            axisLabel: { color: "var(--text-n5)" },
+            splitLine: { lineStyle: { color: "var(--line-l12)" } },
+          },
+          series,
+        });
+        requestAnimationFrame(() => chart.resize());
+      });
+    }
+
+    function activateTabs() {
+      document.querySelectorAll(".tab-button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".tab-button").forEach((b) => {
+            b.classList.remove("is-active");
+            b.setAttribute("aria-selected", "false");
+          });
+          document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("is-active"));
+          btn.classList.add("is-active");
+          btn.setAttribute("aria-selected", "true");
+          document.getElementById(btn.dataset.tab).classList.add("is-active");
+          requestAnimationFrame(() => charts.forEach((chart) => chart.resize()));
+        });
+      });
+      window.addEventListener("resize", () => requestAnimationFrame(() => charts.forEach((chart) => chart.resize())));
+    }
+
+    async function main() {
+      activateTabs();
+      try {
+        appData = await loadData();
+        renderOverview(appData);
+        renderAssets(appData);
+        renderSignals(appData);
+        renderChart(appData);
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("watch-content").style.display = "grid";
+      } catch (err) {
+        document.getElementById("loading").textContent = `Unable to load monitor data: ${err.message || err}`;
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>

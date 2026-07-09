@@ -1,0 +1,28 @@
+{
+  "name": "openalva",
+  "private": true,
+  "version": "0.1.0",
+  "description": "OpenAlva — open, self-hosted replica of alva.ai: conversational financial playbooks with scheduled data feeds, versioned releases, and remix lineage.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.8.0",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "dev:server": "pnpm --filter @openalva/server dev"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.28.0",
+    "eslint-config-prettier": "^10.1.5",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.33.1",
+    "vitest": "^3.2.1"
+  }
+}

@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+.env
+
+# 外部克隆仓库（可重新拉取，各有自己的 git 历史）
+逆向材料/alva-official-skill/
+Portfolio-Watch-Skill/
+
+# 本地运行时数据（真相在 ~/.openalva/，不入库）
+.openalva/
