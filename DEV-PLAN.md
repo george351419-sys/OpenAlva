@@ -1,6 +1,6 @@
 # OpenAlva - DEV Plan
 
-> 版本：v1.0（2026-07-09）｜当前进度：**Phase 0 未开始**
+> 版本：v1.0（2026-07-09）｜当前进度：**Phase 0 完成（commit f5325e5，2026-07-09），下一步 Phase 1**
 > 上游文档：`Product-Spec.md`（功能与范围）、`Design-Brief.md`（视觉裁决）、`逆向材料/Alva系统架构综合.md`（平台行为）、`Portfolio-Watch-Skill/AGENTS.md` §5（实战坑）。
 > 每个 Phase 内任务可独立验证；Phase 完成 = 验收命令通过 + 两阶段 review 通过 + 原子提交。
 
@@ -35,10 +35,10 @@
 
 ## 2. Phase 0 — 工程基座（0.5 天）
 
-- [ ] `git init`、`.gitignore`、pnpm workspaces 脚手架、TS/ESLint/vitest 配置、`pnpm check`（typecheck+lint+test）一键脚本。
-- [ ] vendor 设计资产：从 `逆向材料/alva-official-skill` 复制 design-system.css / design-tokens.css / design-contract.yaml 至 `vendor/design-system/`；server 静态挂载 `/design-system/v1/design-system.css`。
-- [ ] `~/.openalva/` 初始化器（home 树、db、secrets 文件）。
-- **验收**：`pnpm install && pnpm check` 绿；`curl localhost:PORT/design-system/v1/design-system.css` 返回官方 bundle。
+- [x] `git init`、`.gitignore`、pnpm workspaces 脚手架、TS/ESLint/vitest 配置、`pnpm check`（typecheck+lint+test）一键脚本。
+- [x] vendor 设计资产：从 `逆向材料/alva-official-skill` 复制 design-system.css / design-tokens.css / design-contract.yaml 至 `vendor/design-system/`；server 静态挂载 `/design-system/v1/design-system.css`。
+- [x] `~/.openalva/` 初始化器（home 树、db、secrets 文件）。
+- **验收**：`pnpm install && pnpm check` 绿；`curl localhost:PORT/design-system/v1/design-system.css` 返回官方 bundle。✅ 2026-07-09 实测通过（6 测试全绿；/health 200；css/tokens 200 且为官方原件；~/.openalva 树生成）。
 
 ## 3. Phase 1 — ALFS + Feed 运行时 + 调度器（2-3 天，平台心脏）
 
