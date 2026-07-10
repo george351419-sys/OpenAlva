@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@fastify/static": "^8.2.0",
     "@openalva/alfs": "workspace:*",
     "@openalva/data": "workspace:*",
