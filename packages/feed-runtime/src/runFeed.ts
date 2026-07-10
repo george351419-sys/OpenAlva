@@ -1,26 +1,21 @@
-import vm from 'node:vm';
-import { Alfs } from '@openalva/alfs';
-import { fetch as undiciFetch } from 'undici';
-import { buildRequire, type HttpFetchImpl } from './sandbox.js';
-import { AsyncTracker } from './tracker.js';
+import { fork, type ChildProcess } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import type { HttpFetchImpl } from './sandbox.js';
+import type { ChildToHost, HostToChild } from './ipc.js';
+import { envelope, type RunEnvelope } from './vmRun.js';
+
+export { defaultHttpFetch, type RunEnvelope } from './vmRun.js';
 
 /**
  * 执行一个 feed / jagent 脚本，返回与 `alva run` 同形的执行封套：
  * { error, logs, result, stats: { credits_used, duration_ms }, status }
  *
- * 完成语义：脚本求值 + 所有被追踪异步操作静默（整个 async IIFE 跑完）。
- * 隔离说明：Phase 1 采用进程内 vm 上下文（模块白名单保真优先）；
- * 超时用 Promise.race 兜底，无法中断失控同步循环——DEV-PLAN 已记录，
- * 后续替换为子进程隔离时本 API 不变。
+ * 隔离：每次运行 fork 一个一次性 node 子进程（tsx loader）执行 vm 沙箱。
+ * vm 逃逸（宿主原型链够到 Function 构造器）只到达可丢弃的子进程；
+ * 失控同步循环由宿主超时 SIGKILL 中断；maxHeapSizeMb 经
+ * --max-old-space-size 生效。自定义 httpFetch（如 Arrays 路由）经 IPC
+ * 桥回宿主执行，函数不跨进程。
  */
-
-export interface RunEnvelope {
-  error: string | null;
-  logs: string;
-  result: string;
-  stats: { credits_used: number; duration_ms: number };
-  status: 'completed' | 'failed';
-}
 
 export interface RunFeedOptions {
   root: string;
@@ -31,169 +26,141 @@ export interface RunFeedOptions {
   args?: unknown;
   httpFetch?: HttpFetchImpl;
   timeoutMs?: number;
+  /** 子进程 V8 老生代上限（MB），对应 deploy 的 max_heap_size_mb */
+  maxHeapSizeMb?: number;
 }
 
-export const defaultHttpFetch: HttpFetchImpl = async (url, init) => {
-  const resp = await undiciFetch(url, {
-    method: init?.method ?? 'GET',
-    headers: init?.headers ?? {},
-    ...(init?.body !== undefined ? { body: init.body } : {}),
-  });
-  const headers: Record<string, string> = {};
-  resp.headers.forEach((v, k) => {
-    headers[k] = v;
-  });
-  const text = await resp.text();
-  return {
-    status: resp.status,
-    ok: resp.ok,
-    headers,
-    text: async () => text,
-    json: async () => JSON.parse(text),
-  };
-};
-
 /**
- * 进程内全局串行化：同进程并发 runFeed 会带来 rows.json/@kv 竞态与
- * unhandledRejection 归因错乱（review P1-1/P1-2），Phase 1 直接排队执行。
- * 跨进程并发（CLI 与 server 同时跑）仍无锁，风险登记在 DEV-PLAN。
+ * 进程内全局串行化：同进程并发 runFeed 会带来 rows.json/@kv 竞态（review
+ * P1-1/P1-2），排队执行。跨进程并发（CLI 与 server 同时跑）仍无锁，
+ * 风险登记在 DEV-PLAN。
  */
 let runQueue: Promise<unknown> = Promise.resolve();
 
 export function runFeed(opts: RunFeedOptions): Promise<RunEnvelope> {
-  const next = runQueue.then(() => runFeedInner(opts));
+  const next = runQueue.then(() => runFeedInChild(opts));
   runQueue = next.catch(() => undefined);
   return next;
 }
 
-async function runFeedInner(opts: RunFeedOptions): Promise<RunEnvelope> {
-  const started = Date.now();
-  const logs: string[] = [];
-  const tracker = new AsyncTracker();
-  const timeoutMs = opts.timeoutMs ?? 120_000;
-
-  let code: string;
+function tsxImportSpecifier(): string {
   try {
-    if (opts.code !== undefined) {
-      code = opts.code;
-    } else if (opts.entryPath) {
-      code = await new Alfs(opts.root, opts.user).readFile(opts.entryPath);
-    } else {
-      throw new Error('runFeed requires entryPath or code');
-    }
-  } catch (err) {
-    return envelope(String((err as Error).message ?? err), logs, 'undefined', started, 'failed');
+    return import.meta.resolve('tsx');
+  } catch {
+    return 'tsx';
+  }
+}
+
+async function runFeedInChild(opts: RunFeedOptions): Promise<RunEnvelope> {
+  const started = Date.now();
+  const timeoutMs = opts.timeoutMs ?? 120_000;
+  const childPath = fileURLToPath(new URL('./feedChild.ts', import.meta.url));
+  const execArgv = ['--import', tsxImportSpecifier()];
+  if (opts.maxHeapSizeMb !== undefined && opts.maxHeapSizeMb > 0) {
+    execArgv.push(`--max-old-space-size=${Math.floor(opts.maxHeapSizeMb)}`);
   }
 
-  const secretValues = new Set<string>();
-  const require = buildRequire({
-    root: opts.root,
-    user: opts.user,
-    args: opts.args,
-    tracker,
-    httpFetch: opts.httpFetch ?? defaultHttpFetch,
-    log: (line) => logs.push(line),
-    secretValues,
+  let child: ChildProcess;
+  try {
+    child = fork(childPath, [], {
+      execArgv,
+      stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+      serialization: 'json',
+    });
+  } catch (err) {
+    return envelope(
+      `Failed to spawn feed sandbox process: ${String((err as Error).message ?? err)}`,
+      [],
+      'undefined',
+      started,
+      'failed',
+    );
+  }
+
+  const stderrChunks: Buffer[] = [];
+  child.stderr?.on('data', (chunk: Buffer) => {
+    stderrChunks.push(chunk);
   });
 
-  const consoleShim = {
-    log: (...a: unknown[]) => logs.push(a.map(fmt).join(' ')),
-    error: (...a: unknown[]) => logs.push(a.map(fmt).join(' ')),
-    warn: (...a: unknown[]) => logs.push(a.map(fmt).join(' ')),
-    info: (...a: unknown[]) => logs.push(a.map(fmt).join(' ')),
-  };
+  return new Promise<RunEnvelope>((resolve) => {
+    let settled = false;
+    const finish = (env: RunEnvelope): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      resolve(env);
+    };
+    const fail = (message: string): void =>
+      finish(envelope(message, [], 'undefined', started, 'failed'));
 
-  const moduleShim = { exports: {} };
-  // codeGeneration:false 封死 eval / new Function(string) 这类最常见的
-  // 上下文逃逸路径（review P0-2 的缓解项）。vm 本身不是安全边界——
-  // Phase 1 信任模型与剩余逃逸面已登记在 DEV-PLAN §1.7。
-  const context = vm.createContext(
-    {
-      require,
-      console: consoleShim,
-      module: moduleShim,
-      exports: moduleShim.exports,
-    },
-    { codeGeneration: { strings: false, wasm: false } },
-  );
+    const timer = setTimeout(() => fail(`Feed run timed out after ${timeoutMs}ms`), timeoutMs);
 
-  const onUnhandled = (reason: unknown): void => {
-    tracker.noteError(reason);
-  };
-  process.on('unhandledRejection', onUnhandled);
+    const sendToChild = (msg: HostToChild): void => {
+      try {
+        child.send(msg);
+      } catch {
+        // 子进程已退出（如超时被杀），丢弃即可
+      }
+    };
 
-  let result: unknown;
-  let error: string | null = null;
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    const script = new vm.Script(code, { filename: 'main.js' });
-    result = script.runInContext(context);
-    await Promise.race([
-      tracker.drain(),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`Feed run timed out after ${timeoutMs}ms`)),
-          timeoutMs,
-        );
-        timer.unref();
-      }),
-    ]);
-  } catch (err) {
-    error = errMessage(err);
-  } finally {
-    if (timer) clearTimeout(timer); // review P0-1：不清理会吊住事件循环直到超时
-    process.off('unhandledRejection', onUnhandled);
-  }
+    child.on('message', (raw: ChildToHost) => {
+      if (raw.type === 'result') {
+        finish(raw.envelope);
+        return;
+      }
+      if (raw.type === 'http') {
+        const httpFetch = opts.httpFetch;
+        if (!httpFetch) {
+          sendToChild({
+            type: 'http-result',
+            id: raw.id,
+            ok: false,
+            error: 'http bridge requested but host has no httpFetch',
+          });
+          return;
+        }
+        void (async () => {
+          try {
+            const resp = await httpFetch(raw.url, raw.init);
+            const body = await resp.text();
+            sendToChild({
+              type: 'http-result',
+              id: raw.id,
+              ok: true,
+              response: { status: resp.status, ok: resp.ok, headers: resp.headers, body },
+            });
+          } catch (err) {
+            sendToChild({
+              type: 'http-result',
+              id: raw.id,
+              ok: false,
+              error: String((err as Error).message ?? err),
+            });
+          }
+        })();
+      }
+    });
 
-  if (error === null && tracker.firstError !== null) {
-    error = errMessage(tracker.firstError);
-  }
+    child.on('error', (err) => fail(`Feed sandbox process error: ${err.message}`));
 
-  const redact = (text: string): string => {
-    // review P1-3：feed 代码误 log secret 时不落盘、不进封套
-    let out = text;
-    for (const v of secretValues) {
-      if (v.length >= 4) out = out.split(v).join('[REDACTED]');
-    }
-    return out;
-  };
-  const redactedLogs = logs.map(redact);
-  return envelope(
-    error === null ? null : redact(error),
-    redactedLogs,
-    redact(fmt(result)),
-    started,
-    error === null ? 'completed' : 'failed',
-  );
-}
+    child.on('exit', (code, signal) => {
+      if (settled) return;
+      const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
+      fail(
+        `Feed sandbox exited before returning a result (code=${code}, signal=${signal})` +
+          (stderr ? `\n${stderr.slice(0, 2000)}` : ''),
+      );
+    });
 
-function fmt(v: unknown): string {
-  if (typeof v === 'string') return v;
-  if (v === undefined) return 'undefined';
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
-}
-
-function errMessage(err: unknown): string {
-  if (err instanceof Error) return `${err.message}\n${err.stack ?? ''}`.trim();
-  return String(err);
-}
-
-function envelope(
-  error: string | null,
-  logs: string[],
-  result: string,
-  started: number,
-  status: 'completed' | 'failed',
-): RunEnvelope {
-  return {
-    error,
-    logs: logs.length ? logs.join('\n') + '\n' : '',
-    result,
-    stats: { credits_used: 0, duration_ms: Date.now() - started },
-    status,
-  };
+    sendToChild({
+      type: 'run',
+      root: opts.root,
+      user: opts.user,
+      ...(opts.entryPath !== undefined ? { entryPath: opts.entryPath } : {}),
+      ...(opts.code !== undefined ? { code: opts.code } : {}),
+      ...(opts.args !== undefined ? { args: opts.args } : {}),
+      httpBridge: opts.httpFetch !== undefined,
+    });
+  });
 }

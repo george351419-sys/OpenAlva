@@ -61,6 +61,7 @@ export class CronService {
         root: this.root,
         user: job.user,
         entryPath: job.entry_path,
+        ...(job.max_heap_size_mb ? { maxHeapSizeMb: job.max_heap_size_mb } : {}),
       });
       this.store.recordRun({
         cronjob_id: id,
