@@ -1,6 +1,12 @@
 import { Cron } from 'croner';
-import { runFeed } from '@openalva/feed-runtime';
+import { runFeed, type HttpFetchImpl } from '@openalva/feed-runtime';
 import type { CronJob, SchedulerStore } from './store.js';
+
+export interface CronServiceOptions {
+  refreshMs?: number;
+  /** feed 的 net/http 实现（如 Arrays 路由 fetch）；缺省用 feed-runtime 默认 fetch */
+  httpFetch?: HttpFetchImpl;
+}
 
 /**
  * 调度服务：加载 active cronjobs 并按 cron 表达式执行 feed。
@@ -11,12 +17,17 @@ export class CronService {
   private timers = new Map<number, Cron>();
   private refreshTimer: NodeJS.Timeout | null = null;
   private running = new Set<number>();
+  private readonly refreshMs: number;
+  private readonly httpFetch?: HttpFetchImpl;
 
   constructor(
     private readonly store: SchedulerStore,
     private readonly root: string,
-    private readonly refreshMs = 60_000,
-  ) {}
+    opts: CronServiceOptions = {},
+  ) {
+    this.refreshMs = opts.refreshMs ?? 60_000;
+    if (opts.httpFetch) this.httpFetch = opts.httpFetch;
+  }
 
   start(): void {
     this.reconcile();
@@ -62,6 +73,7 @@ export class CronService {
         user: job.user,
         entryPath: job.entry_path,
         ...(job.max_heap_size_mb ? { maxHeapSizeMb: job.max_heap_size_mb } : {}),
+        ...(this.httpFetch ? { httpFetch: this.httpFetch } : {}),
       });
       this.store.recordRun({
         cronjob_id: id,

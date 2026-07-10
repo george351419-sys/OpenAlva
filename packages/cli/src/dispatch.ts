@@ -1,7 +1,8 @@
 import fs from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { Alfs, initOpenAlvaRoot, openAlvaPaths, resolveOpenAlvaRoot } from '@openalva/alfs';
-import { runFeed } from '@openalva/feed-runtime';
+import { createArraysRoutingFetch } from '@openalva/data';
+import { defaultHttpFetch, runFeed } from '@openalva/feed-runtime';
 import { CronService, SchedulerStore } from '@openalva/scheduler';
 
 /**
@@ -152,6 +153,8 @@ async function dispatchRun(rest: string[], root: string, user: string): Promise<
     ...(v.code !== undefined ? { code: v.code } : {}),
     ...(v.args !== undefined ? { args: JSON.parse(v.args) } : {}),
     ...(v['timeout-ms'] !== undefined ? { timeoutMs: Number(v['timeout-ms']) } : {}),
+    // Arrays 主机的请求经 alva 云沙箱执行，与 server 侧口径一致
+    httpFetch: createArraysRoutingFetch({ fallback: defaultHttpFetch }),
   });
 }
 
@@ -215,7 +218,9 @@ async function dispatchDeploy(
         if (verb === 'delete') return store.setStatus(id, 'deleted');
         if (verb === 'runs') return store.runs(id, str(v['limit']) ? Number(str(v['limit'])) : 20);
         // trigger：立即执行一次并返回任务与最新 run
-        const service = new CronService(store, root);
+        const service = new CronService(store, root, {
+          httpFetch: createArraysRoutingFetch({ fallback: defaultHttpFetch }),
+        });
         const job = await service.execute(id, 'manual');
         return { job, latest_run: store.runs(id, 1)[0] ?? null };
       }

@@ -37,5 +37,16 @@ export interface ResultMessage {
   envelope: RunEnvelope;
 }
 
+/** 子进程 loader 就绪；host 收到后才发 run 并起算 timeoutMs（不含启动开销） */
+export interface ReadyMessage {
+  type: 'ready';
+}
+
+/** 已脱敏的日志行实时回传；超时/崩溃时 host 用它拼失败封套的 logs */
+export interface LogMessage {
+  type: 'log';
+  line: string;
+}
+
 export type HostToChild = RunMessage | HttpResultMessage;
-export type ChildToHost = HttpRequestMessage | ResultMessage;
+export type ChildToHost = HttpRequestMessage | ResultMessage | ReadyMessage | LogMessage;

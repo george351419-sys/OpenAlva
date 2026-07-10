@@ -26,6 +26,8 @@ export interface VmRunOptions {
   code?: string;
   args?: unknown;
   httpFetch: HttpFetchImpl;
+  /** 每条日志产生时回调（已按当前已知 secret 脱敏）；供 host 在超时/崩溃时保留日志 */
+  onLog?: (line: string) => void;
 }
 
 export const defaultHttpFetch: HttpFetchImpl = async (url, init) => {
@@ -67,21 +69,34 @@ export async function executeFeedVm(opts: VmRunOptions): Promise<RunEnvelope> {
   }
 
   const secretValues = new Set<string>();
+  const redact = (text: string): string => {
+    // review P1-3：feed 代码误 log secret 时不落盘、不进封套
+    let out = text;
+    for (const v of secretValues) {
+      if (v.length >= 4) out = out.split(v).join('[REDACTED]');
+    }
+    return out;
+  };
+  const pushLog = (line: string): void => {
+    logs.push(line);
+    // 实时回传按「此刻已知」的 secret 脱敏；之后加载的 secret 不可能出现在更早的行里
+    opts.onLog?.(redact(line));
+  };
   const require = buildRequire({
     root: opts.root,
     user: opts.user,
     args: opts.args,
     tracker,
     httpFetch: opts.httpFetch,
-    log: (line) => logs.push(line),
+    log: pushLog,
     secretValues,
   });
 
   const consoleShim = {
-    log: (...a: unknown[]) => logs.push(a.map(fmt).join(' ')),
-    error: (...a: unknown[]) => logs.push(a.map(fmt).join(' ')),
-    warn: (...a: unknown[]) => logs.push(a.map(fmt).join(' ')),
-    info: (...a: unknown[]) => logs.push(a.map(fmt).join(' ')),
+    log: (...a: unknown[]) => pushLog(a.map(fmt).join(' ')),
+    error: (...a: unknown[]) => pushLog(a.map(fmt).join(' ')),
+    warn: (...a: unknown[]) => pushLog(a.map(fmt).join(' ')),
+    info: (...a: unknown[]) => pushLog(a.map(fmt).join(' ')),
   };
 
   const moduleShim = { exports: {} };
@@ -119,14 +134,6 @@ export async function executeFeedVm(opts: VmRunOptions): Promise<RunEnvelope> {
     error = errMessage(tracker.firstError);
   }
 
-  const redact = (text: string): string => {
-    // review P1-3：feed 代码误 log secret 时不落盘、不进封套
-    let out = text;
-    for (const v of secretValues) {
-      if (v.length >= 4) out = out.split(v).join('[REDACTED]');
-    }
-    return out;
-  };
   const redactedLogs = logs.map(redact);
   return envelope(
     error === null ? null : redact(error),

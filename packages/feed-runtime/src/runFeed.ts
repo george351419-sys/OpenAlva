@@ -84,17 +84,25 @@ async function runFeedInChild(opts: RunFeedOptions): Promise<RunEnvelope> {
 
   return new Promise<RunEnvelope>((resolve) => {
     let settled = false;
+    const childLogs: string[] = [];
+    let runTimer: NodeJS.Timeout | undefined;
+    // 启动守卫：tsx loader 挂死（不发 ready）也能兜底退出
+    const readyGuard = setTimeout(
+      () => fail('Feed sandbox failed to become ready within 30000ms'),
+      30_000,
+    );
+
     const finish = (env: RunEnvelope): void => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      clearTimeout(readyGuard);
+      if (runTimer) clearTimeout(runTimer);
       if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
       resolve(env);
     };
+    // 失败封套带上子进程已实时回传的（已脱敏）日志——超时/崩溃不再丢日志
     const fail = (message: string): void =>
-      finish(envelope(message, [], 'undefined', started, 'failed'));
-
-    const timer = setTimeout(() => fail(`Feed run timed out after ${timeoutMs}ms`), timeoutMs);
+      finish(envelope(message, childLogs, 'undefined', started, 'failed'));
 
     const sendToChild = (msg: HostToChild): void => {
       try {
@@ -105,6 +113,26 @@ async function runFeedInChild(opts: RunFeedOptions): Promise<RunEnvelope> {
     };
 
     child.on('message', (raw: ChildToHost) => {
+      if (settled) return;
+      if (raw.type === 'ready') {
+        // 就绪后才发 run 并起算业务超时：timeoutMs 不含 fork/loader 启动开销
+        clearTimeout(readyGuard);
+        runTimer = setTimeout(() => fail(`Feed run timed out after ${timeoutMs}ms`), timeoutMs);
+        sendToChild({
+          type: 'run',
+          root: opts.root,
+          user: opts.user,
+          ...(opts.entryPath !== undefined ? { entryPath: opts.entryPath } : {}),
+          ...(opts.code !== undefined ? { code: opts.code } : {}),
+          ...(opts.args !== undefined ? { args: opts.args } : {}),
+          httpBridge: opts.httpFetch !== undefined,
+        });
+        return;
+      }
+      if (raw.type === 'log') {
+        childLogs.push(raw.line);
+        return;
+      }
       if (raw.type === 'result') {
         finish(raw.envelope);
         return;
@@ -151,16 +179,6 @@ async function runFeedInChild(opts: RunFeedOptions): Promise<RunEnvelope> {
         `Feed sandbox exited before returning a result (code=${code}, signal=${signal})` +
           (stderr ? `\n${stderr.slice(0, 2000)}` : ''),
       );
-    });
-
-    sendToChild({
-      type: 'run',
-      root: opts.root,
-      user: opts.user,
-      ...(opts.entryPath !== undefined ? { entryPath: opts.entryPath } : {}),
-      ...(opts.code !== undefined ? { code: opts.code } : {}),
-      ...(opts.args !== undefined ? { args: opts.args } : {}),
-      httpBridge: opts.httpFetch !== undefined,
     });
   });
 }

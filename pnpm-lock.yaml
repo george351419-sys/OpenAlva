@@ -102,6 +102,9 @@ importers:
       '@openalva/alfs':
         specifier: workspace:*
         version: link:../alfs
+      '@openalva/data':
+        specifier: workspace:*
+        version: link:../data
       '@openalva/feed-runtime':
         specifier: workspace:*
         version: link:../feed-runtime

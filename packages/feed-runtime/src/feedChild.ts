@@ -55,6 +55,7 @@ async function run(msg: RunMessage): Promise<void> {
     ...(msg.code !== undefined ? { code: msg.code } : {}),
     ...(msg.args !== undefined ? { args: msg.args } : {}),
     httpFetch: msg.httpBridge ? bridgedHttpFetch : defaultHttpFetch,
+    onLog: (line) => send({ type: 'log', line }),
   });
   send({ type: 'result', envelope }, () => process.exit(0));
 }
@@ -66,3 +67,6 @@ process.on('message', (raw: HostToChild) => {
     pendingHttp.get(raw.id)?.resolve(raw);
   }
 });
+
+// loader 就绪信号：host 收到后才发 run 并起算业务超时
+send({ type: 'ready' });

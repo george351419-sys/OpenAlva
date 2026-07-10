@@ -110,6 +110,25 @@ describe('runFeed 修复回归（review P0/P1）', () => {
     expect(env.status).toBe('failed');
     expect(String(env.error)).toContain('timed out');
   }, 15_000);
+
+  it('超时封套保留子进程已产生的日志（且已脱敏）', async () => {
+    const env = await runFeed({
+      root,
+      user: 'alice',
+      code: `
+        const secret = require("secret-manager");
+        console.log("before-hang", secret.loadPlaintext("MY_KEY"));
+        const http = require("net/http");
+        http.fetch("https://x.invalid/hang");
+      `,
+      httpFetch: () => new Promise(() => {}),
+      timeoutMs: 800,
+    });
+    expect(env.status).toBe('failed');
+    expect(env.logs).toContain('before-hang');
+    expect(env.logs).not.toContain('sk-supersecret-123');
+    expect(env.logs).toContain('[REDACTED]');
+  }, 15_000);
 });
 
 describe('tsstore 并发写保护（review P1-1）', () => {

@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@openalva/alfs": "workspace:*",
+    "@openalva/data": "workspace:*",
     "@openalva/feed-runtime": "workspace:*",
     "@openalva/scheduler": "workspace:*"
   }
