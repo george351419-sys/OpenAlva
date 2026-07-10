@@ -397,6 +397,106 @@ button {
   cursor: not-allowed;
 }
 
+.model-select {
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-l3, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-btn-l, 8px);
+  background: white;
+  color: var(--text-n7, rgba(0, 0, 0, 0.7));
+  font: inherit;
+  font-size: 13px;
+}
+
+.model-select:disabled {
+  opacity: 0.6;
+}
+
+.artifact-card {
+  margin-left: 42px;
+  max-width: 760px;
+  border: 1px solid var(--line-l12, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-ct-l, 8px);
+  background: white;
+  overflow: hidden;
+}
+
+.artifact-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-l12, rgba(0, 0, 0, 0.08));
+  font-size: 13px;
+  color: var(--text-n7, rgba(0, 0, 0, 0.7));
+}
+
+.artifact-title a {
+  margin-left: auto;
+  color: var(--main-m1, #49a3a6);
+  text-decoration: none;
+}
+
+.artifact-card iframe {
+  display: block;
+  width: 100%;
+  height: 420px;
+  border: 0;
+}
+
+.explore {
+  min-height: 0;
+  overflow: auto;
+  padding: var(--spacing-xl, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l, 20px);
+}
+
+.explore-header h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+
+.explore-header p {
+  margin: 0;
+  color: var(--text-n5, rgba(0, 0, 0, 0.5));
+  font-size: 14px;
+}
+
+.explore-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--spacing-m, 16px);
+}
+
+.explore-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--spacing-m, 16px);
+  border: 1px solid var(--line-l12, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-ct-l, 8px);
+  background: white;
+  color: var(--text-n9, rgba(0, 0, 0, 0.9));
+  text-decoration: none;
+}
+
+.explore-card:hover {
+  border-color: var(--main-m1, #49a3a6);
+}
+
+.explore-desc {
+  color: var(--text-n7, rgba(0, 0, 0, 0.7));
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.explore-meta {
+  color: var(--text-n5, rgba(0, 0, 0, 0.5));
+  font-size: 12px;
+}
+
 .conversation > .tool-card {
   margin-left: 42px;
   max-width: 760px;

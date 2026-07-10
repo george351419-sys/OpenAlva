@@ -33,7 +33,7 @@
 6. 时间戳差异如实保留：美股 kline `time_close` Unix 秒、crypto ISO 字符串（适配器不做"贴心"归一，blueprint 依赖原样）。
 7. 沙箱模块白名单：`net/http`（undici 包装，签名兼容 `http.fetch/get`）、`secret-manager`（`loadPlaintext`）、`@alva/feed`；超时/内存上限可配。
 
-**Phase 1 隔离信任决定（2026-07-10 审查后登记；同日已根治升级）**：feed 执行最初采用进程内 vm 上下文，2026-07-10 按计划升级为**一次性子进程隔离**（`runFeed` fork `feedChild` + tsx loader，API 不变）：vm 逃逸（`this.constructor.constructor(...)` 经宿主原型链够到 Function 构造器）只到达可丢弃的沙箱子进程而非 server 进程（有测试断言逃逸拿到的 pid ≠ 宿主 pid）；失控同步循环由宿主超时 SIGKILL 中断（有测试）；`maxHeapSizeMb` 经 `--max-old-space-size` 生效；自定义 httpFetch（Arrays 路由）经 IPC 桥回宿主执行。保留的纵深防御：子进程内 vm `codeGeneration:false`、模块白名单、secret 脱敏、同进程 runFeed 全局串行化。**仍开放的风险**：跨进程（CLI 与 server 同时写同一 feed）无锁——风险登记不变。**已知口径偏差（接受）**：超时/子进程崩溃的失败封套不含子进程已产生的 logs；`timeoutMs` 从 fork 起计，包含约 0.3–1.5s 的子进程启动开销，配置极紧超时的任务需留余量。
+**Phase 1 隔离信任决定（2026-07-10 审查后登记；同日已根治升级）**：feed 执行最初采用进程内 vm 上下文，2026-07-10 按计划升级为**一次性子进程隔离**（`runFeed` fork `feedChild` + tsx loader，API 不变）：vm 逃逸（`this.constructor.constructor(...)` 经宿主原型链够到 Function 构造器）只到达可丢弃的沙箱子进程而非 server 进程（有测试断言逃逸拿到的 pid ≠ 宿主 pid）；失控同步循环由宿主超时 SIGKILL 中断（有测试）；`maxHeapSizeMb` 经 `--max-old-space-size` 生效；自定义 httpFetch（Arrays 路由）经 IPC 桥回宿主执行。保留的纵深防御：子进程内 vm `codeGeneration:false`、模块白名单、secret 脱敏、同进程 runFeed 全局串行化。**仍开放的风险**：跨进程（CLI 与 server 同时写同一 feed）无锁——风险登记不变。~~已知口径偏差~~（2026-07-10 二轮修复已消除）：子进程日志经 IPC 实时回传（发送前按已知 secret 脱敏），超时/崩溃的失败封套现在保留已产生的 logs（有测试）；`timeoutMs` 改为从子进程 ready 信号起计，不含 fork/loader 启动开销（另有 30s 启动守卫兜底）。
 
 ## 2. Phase 0 — 工程基座（0.5 天）
 
@@ -66,6 +66,7 @@
   - [x] 2026-07-10 部分完成：SQLite `chat_sessions/chat_messages`、Phase 3 工具注册/执行 JSON envelope、`/api/chat/sessions/*` SSE 骨架、BTC 数据问答的确定性 `data.call` 路由、playbook 构建 ask-first fallback。
   - [x] 2026-07-10 追加完成：`AgentRunner` 接入 Anthropic Messages API tool-use 回合（`ANTHROPIC_API_KEY` 存在时启用）、tool 名称安全映射（`.` → `__`）、`text_delta/tool_start/tool_result/message/done` SSE 事件；无 key 时保留本地 fallback。prompt 栈当前为精简 OpenAlva 平台规则，官方 SKILL.md 改写版仍待展开。
   - [x] 2026-07-10 修复轮：改用官方 `@anthropic-ai/sdk` 真流式（`stream:true`，逐 delta 下发 `text_delta`）、`max_tokens` 提至 16384 并显式处理 `stop_reason=max_tokens` 截断；SSE handler 增加错误处理（`error` 事件 + 失败也落库，不再挂死连接）；工具执行历史落库为 `role=tool` 消息（刷新可恢复工具卡、后续轮次回放给模型）；config `defaultUser` 透传 `buildApp`；调度器归 `buildApp` 所有，`deploy.trigger` 与 cron 共享 `CronService` 并发保护；`maxHeapSizeMb` 接通 runFeed；feed 沙箱升级为子进程隔离（见 §1）。
+  - [x] 2026-07-10 二轮：**多模型驱动**——`AgentRunner` 拆 provider（anthropic / deepseek / local fallback），DeepSeek 走 OpenAI 兼容 `chat/completions` 流式 + function tools（key 填 `DEEPSEEK_API_KEY` 环境变量或 `~/.openalva/config.json` 的 `deepseekApiKey`，env 优先）；`GET /api/models` 列可用模型，stream 请求带 `model` 字段路由，前端模型选择器真实生效。**prompt 栈展开**：system prompt 改为官方 SKILL.md 的 OpenAlva 改写精简版（mental model / 三路 request routing / ask-first / content legitimacy / ALFS 语义 / playbook 流程），细节手册经新工具 `skilldocs.list`/`skilldocs.read`（16k 窗口分页）从官方 alva skill 与 Portfolio-Watch-Skill 按需加载。**Arrays 路由全面接线**：cron 定时、agent `run` 工具、CLI `run`/`deploy trigger` 统一经 `createArraysRoutingFetch`（经子进程 http IPC 桥回宿主执行）。**chart artifact**：`artifact.publish {title,html}` 工具 → `/artifacts/:id` 本地 URL → 前端 iframe 卡内嵌渲染。
 - [ ] 工具面注册（F2）：fs/run/deploy/release/data.call/screenshot/skills，schema 即 JSON Schema；blueprint 技能加载（`skills/` 目录：官方 7 个 blueprint + Portfolio-Watch-Skill）。
   - [x] 2026-07-10 部分完成：`fs.read/write/readdir/stat/mkdir/grant`、`run`、`deploy.create/list/get/pause/resume/delete/trigger/runs`、`data.call`、`skills.list/get` 已注册。
   - [x] 2026-07-10 追加完成：`release.playbookDraft`、`release.playbook` 已注册并测试覆盖；`screenshot`、blueprint 技能加载待补。
@@ -81,6 +82,7 @@
 - [ ] 浏览器 SDK（`OpenAlva.Client().fs.read`，参数形态兼容 AlvaToolkit）；lint 门禁（移植 design-contract.yaml 核心规则：容器/滚动/字重/链接/overflow）；screenshot（Playwright）。
   - [x] 2026-07-10 部分完成：`/openalva/v1/client.js` 提供最小 `OpenAlva.Client().fs.read({path})`，通过 `/api/tools/fs.read` 读取 ALFS。lint 门禁和 screenshot 待补。
 - [ ] Explore 门户 + 详情页（Design-Brief §4.3/4.4）；浏览数统计。
+  - [x] 2026-07-10 部分完成：`GET /api/explore` 列出已发布 playbook（扫描 `~/playbooks/*/playbook.json` 有 `latest_release` 的），web 侧 Explore 页卡片网格（名称/描述/版本/live 链接）。详情页、截图卡与浏览数统计待补（截图依赖 Playwright，与 lint 门禁一起另开任务）。
 - **验收**：crypto-top5-watch 的 index.html（仅改 FEED_ROOT 与 SDK 名）本地发布 → URL 打开渲染真数据 → lint 通过 → Explore 出现卡片带截图。
 
 ## 7. Phase 5 — MVP 收口：Portfolio-Watch 种子内容（2-3 天）

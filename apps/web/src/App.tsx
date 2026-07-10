@@ -48,6 +48,21 @@ interface ToolEvent {
   result?: unknown;
 }
 
+interface ModelInfo {
+  id: string;
+  provider: string;
+  default: boolean;
+}
+
+interface ExplorePlaybook {
+  name: string;
+  display_name: string;
+  description: string;
+  latest_release: string;
+  live_url: string;
+  updated_at: number;
+}
+
 export function App(): ReactElement {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -57,6 +72,9 @@ export function App(): ReactElement {
   const [streamingText, setStreamingText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [view, setView] = useState<'chat' | 'explore'>('chat');
   const conversationRef = useRef<HTMLElement | null>(null);
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeSessionId) ?? null,
@@ -78,6 +96,13 @@ export function App(): ReactElement {
   }, [messages, streamingText, toolEvents]);
 
   async function bootstrap(): Promise<void> {
+    void fetchJson<{ models: ModelInfo[] }>('/api/models')
+      .then((res) => {
+        setModels(res.models);
+        const fallback = res.models.find((m) => m.default) ?? res.models[0];
+        if (fallback) setSelectedModel(fallback.id);
+      })
+      .catch(() => undefined);
     const loaded = await fetchJson<{ sessions: ChatSession[] }>('/api/chat/sessions');
     if (loaded.sessions.length > 0) {
       setSessions(loaded.sessions);
@@ -140,7 +165,7 @@ export function App(): ReactElement {
     ]);
 
     try {
-      await streamChat(sessionId, content, handleStreamEvent);
+      await streamChat(sessionId, content, selectedModel, handleStreamEvent);
       const refreshed = await fetchJson<{ sessions: ChatSession[] }>('/api/chat/sessions');
       setSessions(refreshed.sessions);
     } catch (err) {
@@ -216,14 +241,20 @@ export function App(): ReactElement {
         </button>
 
         <nav className="nav-list" aria-label="Primary">
-          <a className="nav-item active" href="#chat">
+          <button
+            className={`nav-item ${view === 'chat' ? 'active' : ''}`}
+            onClick={() => setView('chat')}
+          >
             <Sparkles size={18} />
             Chat
-          </a>
-          <a className="nav-item" href="#explore">
+          </button>
+          <button
+            className={`nav-item ${view === 'explore' ? 'active' : ''}`}
+            onClick={() => setView('explore')}
+          >
             <Compass size={18} />
             Explore
-          </a>
+          </button>
           <a className="nav-item" href="#portfolio">
             <LayoutDashboard size={18} />
             Portfolio
@@ -264,6 +295,10 @@ export function App(): ReactElement {
       </aside>
 
       <main className="main">
+        {view === 'explore' ? (
+          <ExploreView />
+        ) : (
+          <>
         <header className="topbar">
           <button className="title-button">
             {activeSession?.title ?? 'New Chat'}
@@ -339,17 +374,75 @@ export function App(): ReactElement {
               Skills
             </button>
             <div className="spacer" />
-            <button className="model-button" type="button">
-              claude-fable-5
-              <ChevronDown size={15} />
-            </button>
+            <select
+              className="model-select"
+              aria-label="Model"
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              disabled={isSending || models.length === 0}
+            >
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.id}
+                  {m.provider === 'local' ? '（本地 fallback）' : ''}
+                </option>
+              ))}
+            </select>
             <button className="send-button" type="submit" disabled={isSending || !draft.trim()}>
               {isSending ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
             </button>
           </div>
         </form>
+          </>
+        )}
       </main>
     </div>
+  );
+}
+
+function ExploreView(): ReactElement {
+  const [playbooks, setPlaybooks] = useState<ExplorePlaybook[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    void fetchJson<{ playbooks: ExplorePlaybook[] }>('/api/explore')
+      .then((res) => setPlaybooks(res.playbooks))
+      .catch(() => undefined)
+      .finally(() => setLoaded(true));
+  }, []);
+
+  return (
+    <section className="explore">
+      <header className="explore-header">
+        <h1>Explore</h1>
+        <p>本机已发布的 playbook。</p>
+      </header>
+      {loaded && playbooks.length === 0 ? (
+        <div className="empty-state">
+          <Compass size={28} />
+          <h1>还没有已发布的 playbook。</h1>
+          <p>在 Chat 里让 agent 构建并 release 一个，它就会出现在这里。</p>
+        </div>
+      ) : (
+        <div className="explore-grid">
+          {playbooks.map((pb) => (
+            <a
+              key={pb.name}
+              className="explore-card"
+              href={pb.live_url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <strong>{pb.display_name}</strong>
+              <span className="explore-desc">{pb.description || '（暂无描述）'}</span>
+              <span className="explore-meta">
+                {pb.latest_release} · {new Date(pb.updated_at).toLocaleDateString()}
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -383,6 +476,26 @@ function MessageBubble({ message }: { message: ChatMessage }): ReactElement {
 }
 
 function ToolCard({ tool }: { tool: ToolEvent }): ReactElement {
+  // artifact.publish 成功后直接内嵌渲染，不折叠
+  if (tool.name === 'artifact.publish' && tool.status === 'completed') {
+    const data = (tool.result as { data?: { url?: string; title?: string } } | undefined)?.data;
+    if (data?.url) {
+      return (
+        <div className="artifact-card">
+          <div className="artifact-title">
+            <Sparkles size={15} />
+            <span>{data.title ?? 'Artifact'}</span>
+            <a href={data.url} target="_blank" rel="noreferrer">
+              打开
+            </a>
+          </div>
+          {/* 不给 allow-same-origin：artifact 是模型生成的 HTML，
+              同源会让其脚本可直调无鉴权的 /api/tools/* 工具面 */}
+          <iframe src={data.url} title={data.title ?? 'artifact'} sandbox="allow-scripts" />
+        </div>
+      );
+    }
+  }
   return (
     <details className={`tool-card ${tool.status}`} open={tool.status === 'running'}>
       <summary>
@@ -406,12 +519,13 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 async function streamChat(
   sessionId: string,
   message: string,
+  model: string,
   onEvent: (event: string, data: StreamEvent | ChatMessage) => void,
 ): Promise<void> {
   const resp = await fetch(`/api/chat/sessions/${sessionId}/stream`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, ...(model ? { model } : {}) }),
   });
   if (!resp.ok || !resp.body) throw new Error(`chat stream failed: ${resp.status}`);
 
