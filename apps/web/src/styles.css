@@ -486,6 +486,16 @@ button {
   border-color: var(--main-m1, #49a3a6);
 }
 
+.explore-shot {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top;
+  border-radius: 6px;
+  border: 1px solid var(--line-l12, rgba(0, 0, 0, 0.08));
+  background: var(--grey-g01, #fafafa);
+}
+
 .explore-desc {
   color: var(--text-n7, rgba(0, 0, 0, 0.7));
   font-size: 13px;

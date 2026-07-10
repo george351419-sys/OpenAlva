@@ -365,12 +365,46 @@ describe('server app', () => {
       data: { playbook: { name: 'btc-watch', status: 'draft' } },
     });
 
+    // 先写一个违反设计契约的 index.html：release 必须被 lint 门禁拦下
     await app.inject({
       method: 'POST',
       url: '/api/tools/fs.write',
       payload: {
         path: '~/playbooks/btc-watch/index.html',
-        content: '<!doctype html><html><body><main>BTC Watch</main></body></html>',
+        content:
+          '<!doctype html><html><body style="font-weight:700"><main>BTC Watch</main><a href="https://x.test">out</a></body></html>',
+      },
+    });
+    const blocked = await app.inject({
+      method: 'POST',
+      url: '/api/tools/release.playbook',
+      payload: { name: 'btc-watch' },
+    });
+    expect(blocked.json()).toMatchObject({ success: false });
+    expect(blocked.json<{ error: { message: string } }>().error.message).toContain(
+      'Design lint failed',
+    );
+
+    const lintReport = await app.inject({
+      method: 'POST',
+      url: '/api/tools/release.lint',
+      payload: { name: 'btc-watch' },
+    });
+    const lintData = lintReport.json<{
+      data: { pass: boolean; violations: { rule: string }[] };
+    }>().data;
+    expect(lintData.pass).toBe(false);
+    expect(lintData.violations.map((v) => v.rule)).toEqual(
+      expect.arrayContaining(['required-container', 'required-stylesheets', 'links', 'typography']),
+    );
+
+    // 改成契约合规的 index.html 后可以发布
+    await app.inject({
+      method: 'POST',
+      url: '/api/tools/fs.write',
+      payload: {
+        path: '~/playbooks/btc-watch/index.html',
+        content: compliantPlaybookHtml('BTC Watch'),
       },
     });
 
@@ -406,6 +440,32 @@ describe('server app', () => {
     expect(sdk.statusCode).toBe(200);
     expect(sdk.body).toContain('window.OpenAlva');
 
+    // force=true 可跳过 lint 门禁（写回违规页再强发一版验证）
+    await app.inject({
+      method: 'POST',
+      url: '/api/tools/fs.write',
+      payload: {
+        path: '~/playbooks/btc-watch/index.html',
+        content: '<!doctype html><html><body><main>bad</main></body></html>',
+      },
+    });
+    const forced = await app.inject({
+      method: 'POST',
+      url: '/api/tools/release.playbook',
+      payload: { name: 'btc-watch', force: true },
+    });
+    expect(forced.json()).toMatchObject({ success: true, data: { release: { version: 'v2' } } });
+
+    // 再开一次 live 页 → 浏览数累计到 Explore；截图请求（带标记头）不计数
+    await app.inject({ method: 'GET', url: '/u/george/playbooks/btc-watch' });
+    await app.inject({
+      method: 'GET',
+      url: '/u/george/playbooks/btc-watch',
+      headers: { 'x-openalva-screenshot': '1' },
+    });
+    // 非法 playbook 名 → 404 而非 500
+    const badName = await app.inject({ method: 'GET', url: '/u/george/playbooks/UP PER' });
+    expect(badName.statusCode).toBe(404);
     const explore = await app.inject({ method: 'GET', url: '/api/explore' });
     expect(explore.statusCode).toBe(200);
     expect(explore.json()).toMatchObject({
@@ -413,8 +473,10 @@ describe('server app', () => {
         {
           name: 'btc-watch',
           display_name: 'BTC Watch',
-          latest_release: 'v1',
+          latest_release: 'v2', // force 发布的第二版
           live_url: '/u/george/playbooks/btc-watch',
+          screenshot_url: null, // 测试环境无 baseUrl，不截图
+          views: 2, // 两次真实浏览；带截图头的那次不计数
         },
       ],
     });
@@ -457,6 +519,18 @@ class StubDataSource implements DataSource {
     this.calls.push(input);
     return { success: true, data: this.rows };
   }
+}
+
+/** 满足 design-contract 核心规则的最小 playbook HTML。 */
+function compliantPlaybookHtml(title: string): string {
+  return [
+    '<!doctype html><html><head>',
+    '<link rel="stylesheet" href="/design-system/v1/design-system.css">',
+    '<style>html{-webkit-font-smoothing: antialiased;-moz-osx-font-smoothing: grayscale;text-rendering: optimizeLegibility;}</style>',
+    '</head><body>',
+    `<div class="playbook-container">${title}</div>`,
+    '</body></html>',
+  ].join('');
 }
 
 type FakeBlock =

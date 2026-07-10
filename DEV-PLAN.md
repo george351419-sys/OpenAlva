@@ -81,8 +81,11 @@
   - [x] 2026-07-10 部分完成：新增 `ReleaseService`，支持创建/更新 draft playbook 目录与 `playbook.json`，发布 `index.html` 到 `pb-static/<user>/<name>/<version>/`，更新 `latest_release`，并提供 `/u/<user>/playbooks/<name>` live URL。feeds 产出校验、changelog AI 草稿、完整 schema 兼容仍待补。
 - [ ] 浏览器 SDK（`OpenAlva.Client().fs.read`，参数形态兼容 AlvaToolkit）；lint 门禁（移植 design-contract.yaml 核心规则：容器/滚动/字重/链接/overflow）；screenshot（Playwright）。
   - [x] 2026-07-10 部分完成：`/openalva/v1/client.js` 提供最小 `OpenAlva.Client().fs.read({path})`，通过 `/api/tools/fs.read` 读取 ALFS。lint 门禁和 screenshot 待补。
+  - [x] 2026-07-11 完成 lint 门禁：`playbookLint.ts` 移植 design-contract 全局核心规则（容器/样式表/滚动唯一容器/字重 400\|500/链接 target+rel/抗锯齿三声明/ECharts rAF），`release.lint` 工具 + `release.playbook` 强制拦截（`force=true` 可跳过）；组件级 registry 校验留待需要时再补。测试锁定违规拦截与合规放行。
+  - [x] 2026-07-11 完成 screenshot：`playwright-core` + 本机 Chrome（channel:'chrome'，不下载 Chromium）。release 成功后 best-effort 截图到快照目录（无 Chrome/加载失败不阻塞发布）；`screenshot {url}` 工具供 agent 自检视觉产出（仅限本机 URL，PNG 经 /artifacts/:id.png 提供）。实测发布 demo playbook 生成 12KB 截图。
 - [ ] Explore 门户 + 详情页（Design-Brief §4.3/4.4）；浏览数统计。
-  - [x] 2026-07-10 部分完成：`GET /api/explore` 列出已发布 playbook（扫描 `~/playbooks/*/playbook.json` 有 `latest_release` 的），web 侧 Explore 页卡片网格（名称/描述/版本/live 链接）。详情页、截图卡与浏览数统计待补（截图依赖 Playwright，与 lint 门禁一起另开任务）。
+  - [x] 2026-07-10 部分完成：`GET /api/explore` 列出已发布 playbook（扫描 `~/playbooks/*/playbook.json` 有 `latest_release` 的），web 侧 Explore 页卡片网格（名称/描述/版本/live 链接）。
+  - [x] 2026-07-11 追加：Explore 卡片带 release 截图（screenshot_url）与浏览数（`playbook_views` 表，live 页每次打开 +1，截图访问经 x-openalva-screenshot 头豁免计数）。仅剩详情页待补。
 - **验收**：crypto-top5-watch 的 index.html（仅改 FEED_ROOT 与 SDK 名）本地发布 → URL 打开渲染真数据 → lint 通过 → Explore 出现卡片带截图。
 
 ## 7. Phase 5 — MVP 收口：Portfolio-Watch 种子内容（2-3 天）

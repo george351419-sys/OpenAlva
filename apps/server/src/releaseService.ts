@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { homeDir } from '@openalva/alfs';
+import { lintPlaybookHtml, type LintResult } from './playbookLint.js';
+import { captureScreenshot } from './screenshotService.js';
 
 export interface PlaybookRelease {
   version: string;
@@ -28,7 +30,16 @@ export class ReleaseService {
   constructor(
     private readonly root: string,
     private readonly user: string,
+    /** 本服务的对外地址（如 http://127.0.0.1:4700）；有值才做 release 截图 */
+    private readonly baseUrl?: string,
   ) {}
+
+  /** 对 draft 的 index.html 跑设计契约 lint（release 门禁同款规则）。 */
+  async lint(name: string): Promise<LintResult> {
+    const clean = cleanName(name);
+    const html = await fs.readFile(path.join(this.playbookDir(clean), 'index.html'), 'utf8');
+    return lintPlaybookHtml(html);
+  }
 
   async createDraft(input: {
     name: string;
@@ -82,7 +93,14 @@ export class ReleaseService {
     name: string;
     version?: string;
     changelog?: string;
-  }): Promise<{ playbook: PlaybookJson; release: PlaybookRelease; snapshotDir: string }> {
+    /** true = 明知 lint 违规仍强行发布（登记在 release.changelog 之外，慎用） */
+    force?: boolean;
+  }): Promise<{
+    playbook: PlaybookJson;
+    release: PlaybookRelease;
+    snapshotDir: string;
+    screenshot: string | null;
+  }> {
     const name = cleanName(input.name);
     const dir = this.playbookDir(name);
     const jsonFile = path.join(dir, 'playbook.json');
@@ -90,6 +108,15 @@ export class ReleaseService {
     const indexFile = path.join(dir, 'index.html');
     const index = await fs.readFile(indexFile, 'utf8');
     if (!index.trim()) throw new Error(`Cannot release empty index.html for ${name}`);
+
+    // lint 门禁：设计契约核心规则不过不发（force 可跳过）
+    const lint = lintPlaybookHtml(index);
+    if (!lint.pass && !input.force) {
+      const detail = lint.violations.map((v) => `[${v.rule}] ${v.message}`).join('\n');
+      throw new Error(
+        `Design lint failed for ${name} (${lint.violations.length} violations). Fix index.html or pass force=true.\n${detail}`,
+      );
+    }
 
     const version = input.version ?? nextVersion(playbook.releases);
     if (!/^v\d+$/.test(version)) throw new Error('version must look like v1, v2, ...');
@@ -114,7 +141,25 @@ export class ReleaseService {
     playbook.draft.updated_at = release.created_at;
     await writeJson(jsonFile, playbook);
     await writeJson(path.join(snapshotDir, 'playbook.json'), playbook);
-    return { playbook, release, snapshotDir };
+
+    // best-effort 截图：本机没有 Chrome 或页面加载失败不阻塞发布
+    let screenshot: string | null = null;
+    if (this.baseUrl) {
+      try {
+        await captureScreenshot({
+          url: `${this.baseUrl}${release.live_url}`,
+          outFile: path.join(snapshotDir, 'screenshot.png'),
+        });
+        screenshot = `/pb-static/${this.user}/${name}/${version}/screenshot.png`;
+      } catch (err) {
+        // best-effort：无 Chrome/加载失败不阻塞发布，但要留下诊断线索
+        console.warn(
+          `[release] screenshot failed for ${name}@${version}: ${String((err as Error).message ?? err)}`,
+        );
+        screenshot = null;
+      }
+    }
+    return { playbook, release, snapshotDir, screenshot };
   }
 
   /** Explore 门户数据源：所有已发布（有 latest_release）的 playbook。 */
@@ -125,6 +170,7 @@ export class ReleaseService {
       description: string;
       latest_release: string;
       live_url: string;
+      screenshot_url: string | null;
       updated_at: number;
     }[]
   > {
@@ -142,12 +188,27 @@ export class ReleaseService {
           await fs.readFile(path.join(playbooksDir, entry, 'playbook.json'), 'utf8'),
         ) as PlaybookJson;
         if (!playbook.latest_release) continue;
+        const shotFile = path.join(
+          this.root,
+          'pb-static',
+          this.user,
+          playbook.name,
+          playbook.latest_release,
+          'screenshot.png',
+        );
+        const hasShot = await fs.access(shotFile).then(
+          () => true,
+          () => false,
+        );
         out.push({
           name: playbook.name,
           display_name: playbook.display_name,
           description: playbook.description,
           latest_release: playbook.latest_release,
           live_url: `/u/${this.user}/playbooks/${playbook.name}`,
+          screenshot_url: hasShot
+            ? `/pb-static/${this.user}/${playbook.name}/${playbook.latest_release}/screenshot.png`
+            : null,
           updated_at: playbook.draft.updated_at,
         });
       } catch {

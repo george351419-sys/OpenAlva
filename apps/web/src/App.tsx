@@ -60,6 +60,8 @@ interface ExplorePlaybook {
   description: string;
   latest_release: string;
   live_url: string;
+  screenshot_url: string | null;
+  views: number;
   updated_at: number;
 }
 
@@ -433,10 +435,14 @@ function ExploreView(): ReactElement {
               target="_blank"
               rel="noreferrer"
             >
+              {pb.screenshot_url ? (
+                <img className="explore-shot" src={pb.screenshot_url} alt={pb.display_name} />
+              ) : null}
               <strong>{pb.display_name}</strong>
               <span className="explore-desc">{pb.description || '（暂无描述）'}</span>
               <span className="explore-meta">
-                {pb.latest_release} · {new Date(pb.updated_at).toLocaleDateString()}
+                {pb.latest_release} · {new Date(pb.updated_at).toLocaleDateString()} ·{' '}
+                {pb.views} 次浏览
               </span>
             </a>
           ))}

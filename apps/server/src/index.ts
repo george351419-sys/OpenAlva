@@ -36,6 +36,7 @@ async function main(): Promise<void> {
     anthropicModel: process.env['OPENALVA_CLAUDE_MODEL'] ?? config.anthropicModel,
     deepseekApiKey: process.env['DEEPSEEK_API_KEY'] ?? config.deepseekApiKey,
     deepseekModel: process.env['OPENALVA_DEEPSEEK_MODEL'] ?? config.deepseekModel,
+    baseUrl: `http://127.0.0.1:${PORT}`,
   });
   await app.listen({ port: PORT, host: '127.0.0.1' });
   console.log(`openalva-server listening on http://127.0.0.1:${PORT} (root: ${root})`);

@@ -503,7 +503,7 @@ function systemPrompt(): string {
     '- ALFS ts(group, doc).append(rows): rows sharing one date replace that whole bucket; different dates coexist; @last/N reads the newest N records.',
     '- data/ mounts are only writable through ts append, never plain fs.write.',
     '- Feeds cannot trigger their own recompute; UI actions write config flags read on the next scheduled run; the owner can deploy.trigger manually.',
-    '- Playbook flow: release.playbookDraft → write ~/playbooks/<name>/index.html (link /design-system/v1/design-system.css and the browser SDK /openalva/v1/client.js) → release.playbook → live at /u/<user>/playbooks/<name>.',
+    '- Playbook flow: release.playbookDraft → write ~/playbooks/<name>/index.html (link /design-system/v1/design-system.css and the browser SDK /openalva/v1/client.js; wrap content in <div class="playbook-container">) → release.lint and fix ALL violations → release.playbook (refuses on lint violations) → live at /u/<user>/playbooks/<name>. Verify the rendered page with the screenshot tool.',
     '- One-off charts or visual explainers: artifact.publish {title, html} returns a URL that renders inline as an iframe card — prefer this for chart answers.',
     '',
     'Deep procedures (Feed SDK, playbook creation, design rules, data-skill catalogs, operational pitfalls) live in skill docs. Call skilldocs.list to discover them and skilldocs.read (with offset paging) BEFORE building feeds, playbooks, or Altra strategies. Key references in the alva skill: references/feed-sdk.md, references/playbook-creation.md, references/design.md, references/data-skills.md, references/operational-pitfalls.md.',

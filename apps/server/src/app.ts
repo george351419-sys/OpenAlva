@@ -12,6 +12,7 @@ import { AgentTools } from './agentTools.js';
 import { ChatStore } from './chatStore.js';
 import { findRepoRoot } from './repoRoot.js';
 import { ReleaseService } from './releaseService.js';
+import { ViewsStore } from './viewsStore.js';
 
 export interface BuildAppOptions {
   repoRoot?: string;
@@ -25,6 +26,8 @@ export interface BuildAppOptions {
   fetchImpl?: typeof fetch;
   /** feed 的 net/http 实现；缺省为 Arrays 路由 fetch（非 Arrays 请求走本地 fetch） */
   feedHttpFetch?: HttpFetchImpl;
+  /** 本服务对外地址（如 http://127.0.0.1:4700）；有值 release 才做截图 */
+  baseUrl?: string;
 }
 
 export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
@@ -42,6 +45,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   const schedulerStore = new SchedulerStore(openAlvaPaths(root).dbFile);
   const cronService = new CronService(schedulerStore, root, { httpFetch: feedHttpFetch });
   cronService.start();
+  const releases = new ReleaseService(root, user, opts.baseUrl);
+  const views = new ViewsStore(openAlvaPaths(root).dbFile);
   const tools = new AgentTools({
     root,
     user,
@@ -50,8 +55,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     cronService,
     feedHttpFetch,
     repoRoot,
+    releases,
+    ...(opts.baseUrl ? { baseUrl: opts.baseUrl } : {}),
   });
-  const releases = new ReleaseService(root, user);
   const agent = new AgentRunner({
     tools,
     anthropicApiKey: opts.anthropicApiKey ?? process.env['ANTHROPIC_API_KEY'],
@@ -82,12 +88,21 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   );
   app.get('/api/tools', async () => ({ tools: tools.specs() }));
   app.get('/api/models', async () => ({ models: agent.models() }));
-  app.get('/api/explore', async () => ({ playbooks: await releases.listReleased() }));
+  app.get('/api/explore', async () => {
+    const playbooks = await releases.listReleased();
+    return {
+      playbooks: playbooks.map((pb) => ({ ...pb, views: views.get(user, pb.name) })),
+    };
+  });
 
   app.get('/artifacts/:id', async (req, reply) => {
     const id = (req.params as { id: string }).id;
-    if (!/^[0-9a-f-]{36}$/.test(id)) return reply.code(404).send({ error: 'not found' });
+    if (!/^[0-9a-f-]{36}(\.png)?$/.test(id)) return reply.code(404).send({ error: 'not found' });
     try {
+      if (id.endsWith('.png')) {
+        const png = await fsp.readFile(path.join(root, 'artifacts', id));
+        return reply.type('image/png').send(png);
+      }
       const html = await fsp.readFile(path.join(root, 'artifacts', `${id}.html`), 'utf8');
       // 模型生成的 HTML 一律降权：即便被直接导航打开也处于 opaque origin，
       // 脚本无法打到无鉴权的 /api/tools/*
@@ -203,16 +218,23 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     try {
       snapshot = await releases.latestSnapshot(params.name);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      const notFound =
+        (err as NodeJS.ErrnoException).code === 'ENOENT' ||
+        (err instanceof Error && err.message.includes('playbook name must be'));
+      if (!notFound) throw err;
     }
     if (!snapshot) return reply.code(404).send({ error: 'playbook has no release' });
     const html = await fsp.readFile(snapshot, 'utf8');
+    if (!req.headers['x-openalva-screenshot']) {
+      views.increment(user, params.name.trim().toLowerCase());
+    }
     return reply.type('text/html').send(html);
   });
 
   app.addHook('onClose', async () => {
     cronService.stop();
     schedulerStore.close();
+    views.close();
     chatStore.close();
   });
 

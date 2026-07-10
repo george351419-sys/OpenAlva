@@ -12,6 +12,7 @@ import {
 import { runFeed, type HttpFetchImpl } from '@openalva/feed-runtime';
 import type { CronService, SchedulerStore } from '@openalva/scheduler';
 import { ReleaseService } from './releaseService.js';
+import { captureScreenshot } from './screenshotService.js';
 import { SkillDocs } from './skillDocs.js';
 
 export interface ToolEnvelope<T = unknown> {
@@ -43,6 +44,10 @@ export interface AgentToolsOptions {
   feedHttpFetch?: HttpFetchImpl;
   /** 仓库根：skilldocs 从 skills/ 与逆向材料目录加载 SKILL.md */
   repoRoot?: string;
+  /** 与 server 共享的 ReleaseService（带 baseUrl 时 release 会截图） */
+  releases?: ReleaseService;
+  /** 本服务对外地址；screenshot 工具依赖它把相对路径拼成完整本机 URL */
+  baseUrl?: string;
 }
 
 export class AgentTools {
@@ -54,7 +59,7 @@ export class AgentTools {
   constructor(private readonly opts: AgentToolsOptions) {
     this.alfs = new Alfs(opts.root, opts.user);
     this.dataSource = opts.dataSource ?? new ArraysViaAlvaSource();
-    this.releases = new ReleaseService(opts.root, opts.user);
+    this.releases = opts.releases ?? new ReleaseService(opts.root, opts.user);
     this.skillDocs = new SkillDocs(opts.repoRoot);
   }
 
@@ -173,15 +178,42 @@ export class AgentTools {
           feeds: { type: 'array', items: { type: 'string' } },
         },
       }),
-      spec('release.playbook', 'Publish a playbook index.html as an immutable local release snapshot.', {
-        type: 'object',
-        required: ['name'],
-        properties: {
-          name: { type: 'string' },
-          version: { type: 'string' },
-          changelog: { type: 'string' },
+      spec(
+        'release.lint',
+        'Run the design-contract lint on a draft playbook index.html (same gate release.playbook enforces). Fix all violations before releasing.',
+        {
+          type: 'object',
+          required: ['name'],
+          properties: { name: { type: 'string' } },
         },
-      }),
+      ),
+      spec(
+        'release.playbook',
+        'Publish a playbook index.html as an immutable local release snapshot. Runs the design lint first and refuses on violations (force=true overrides). Captures an Explore card screenshot when possible.',
+        {
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string' },
+            version: { type: 'string' },
+            changelog: { type: 'string' },
+            force: { type: 'boolean' },
+          },
+        },
+      ),
+      spec(
+        'screenshot',
+        'Capture a PNG screenshot of a local page (live playbook URL or /artifacts/... URL) to visually verify rendering. Returns an image URL.',
+        {
+          type: 'object',
+          required: ['url'],
+          properties: {
+            url: { type: 'string', description: 'Path on this server, e.g. /u/<user>/playbooks/<name>' },
+            width: { type: 'number' },
+            height: { type: 'number' },
+          },
+        },
+      ),
       spec(
         'skilldocs.list',
         'List platform methodology manuals (the alva platform skill and Portfolio-Watch-Skill). These are how-to guides for feeds/playbooks/strategies — NOT data endpoint docs (use skills.doc for those).',
@@ -300,6 +332,7 @@ export class AgentTools {
           // 少数端点镜像时未抓到 doc——这是「禁猜参」规则的唯一例外场景
           throw new Error(
             `No mirrored doc exists for ${skill}/${endpoint.file} (mirror gap). As an exception, call it with minimal params and read the error response.`,
+            { cause: err },
           );
         }
       }
@@ -312,12 +345,17 @@ export class AgentTools {
             ? { feeds: input['feeds'].filter((v): v is string => typeof v === 'string') }
             : {}),
         });
+      case 'release.lint':
+        return this.releases.lint(reqString(input, 'name'));
       case 'release.playbook':
         return this.releases.publish({
           name: reqString(input, 'name'),
           ...(typeof input['version'] === 'string' ? { version: input['version'] } : {}),
           ...(typeof input['changelog'] === 'string' ? { changelog: input['changelog'] } : {}),
+          ...(typeof input['force'] === 'boolean' ? { force: input['force'] } : {}),
         });
+      case 'screenshot':
+        return this.captureLocalScreenshot(input);
       case 'skilldocs.list':
         return { skills: this.skillDocs.list() };
       case 'skilldocs.read':
@@ -331,6 +369,32 @@ export class AgentTools {
       default:
         return this.executeDeploy(name, input);
     }
+  }
+
+  /** 截屏本机页面到 <root>/artifacts/<uuid>.png；仅允许 127.0.0.1/localhost */
+  private async captureLocalScreenshot(input: Record<string, unknown>): Promise<unknown> {
+    const baseUrl = this.opts.baseUrl;
+    if (!baseUrl) {
+      throw new Error('screenshot is unavailable: server was started without a baseUrl');
+    }
+    const rawUrl = reqString(input, 'url');
+    const target = rawUrl.startsWith('http')
+      ? rawUrl
+      : `${baseUrl}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+    const hostname = new URL(target).hostname;
+    if (hostname !== '127.0.0.1' && hostname !== 'localhost') {
+      throw new Error('screenshot only supports local URLs on this server');
+    }
+    const id = crypto.randomUUID();
+    const dir = path.join(this.opts.root, 'artifacts');
+    await fsp.mkdir(dir, { recursive: true });
+    await captureScreenshot({
+      url: target,
+      outFile: path.join(dir, `${id}.png`),
+      ...(typeof input['width'] === 'number' ? { width: input['width'] } : {}),
+      ...(typeof input['height'] === 'number' ? { height: input['height'] } : {}),
+    });
+    return { url: `/artifacts/${id}.png` };
   }
 
   /** 一次性 HTML artifact：存到 <root>/artifacts/<uuid>.html，经 /artifacts/:id 提供 */
