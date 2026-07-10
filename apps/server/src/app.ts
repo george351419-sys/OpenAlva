@@ -5,6 +5,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { openAlvaPaths, resolveOpenAlvaRoot } from '@openalva/alfs';
 import type { DataSource } from '@openalva/data';
+import { CronService, SchedulerStore } from '@openalva/scheduler';
 import { AgentRunner } from './agentRunner.js';
 import { AgentTools } from './agentTools.js';
 import { ChatStore } from './chatStore.js';
@@ -27,7 +28,18 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   const user = opts.user ?? 'george351419';
   const app = Fastify({ logger: false });
   const chatStore = new ChatStore(openAlvaPaths(root).dbFile);
-  const tools = new AgentTools({ root, user, dataSource: opts.dataSource });
+  // 调度器归 buildApp 所有：deploy.trigger 与 cron 执行共享同一 CronService，
+  // 同任务并发保护（running set）才真正生效。
+  const schedulerStore = new SchedulerStore(openAlvaPaths(root).dbFile);
+  const cronService = new CronService(schedulerStore, root);
+  cronService.start();
+  const tools = new AgentTools({
+    root,
+    user,
+    dataSource: opts.dataSource,
+    schedulerStore,
+    cronService,
+  });
   const releases = new ReleaseService(root, user);
   const agent = new AgentRunner({
     tools,
@@ -85,6 +97,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     if (!message) return reply.code(400).send({ error: 'message is required' });
 
     chatStore.addMessage({ sessionId: id, role: 'user', content: message });
+    reply.hijack();
+    // 客户端断连时 raw socket 会 emit 'error'，无监听会抛顶层
+    reply.raw.on('error', () => undefined);
     reply.raw.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-cache, no-transform',
@@ -92,37 +107,79 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     });
 
     const emit = (event: string, data: unknown): void => {
+      // 客户端可能中途断连；对已关闭的 socket 不再写
+      if (reply.raw.writableEnded || reply.raw.destroyed) return;
       reply.raw.write(`event: ${event}\n`);
       reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
     emit('session', { id });
-    const response = await agent.run({
-      messages: chatStore.messages(id),
-      latestMessage: message,
-      emit: (event, data) => emit(event, data),
-    });
-    const assistantMessage = chatStore.addMessage({
-      sessionId: id,
-      role: 'assistant',
-      content: response.content,
-      metadata: response.metadata,
-    });
-    emit('message', assistantMessage);
-    emit('done', { ok: true });
-    reply.raw.end();
+    try {
+      const response = await agent.run({
+        messages: chatStore.messages(id),
+        latestMessage: message,
+        emit: (event, data) => {
+          if (event === 'tool_result') {
+            // 工具执行历史落库：刷新后 UI 可恢复工具卡，后续轮次模型可见
+            const d = data as {
+              id?: string;
+              name?: string;
+              input?: unknown;
+              envelope?: unknown;
+            };
+            chatStore.addMessage({
+              sessionId: id,
+              role: 'tool',
+              content: JSON.stringify({ input: d.input, envelope: d.envelope }),
+              ...(typeof d.name === 'string' ? { toolName: d.name } : {}),
+              ...(typeof d.id === 'string' ? { toolCallId: d.id } : {}),
+            });
+          }
+          emit(event, data);
+        },
+      });
+      const assistantMessage = chatStore.addMessage({
+        sessionId: id,
+        role: 'assistant',
+        content: response.content,
+        metadata: response.metadata,
+      });
+      emit('message', assistantMessage);
+      emit('done', { ok: true });
+    } catch (err) {
+      // headers 已写出，只能经 SSE 报错；错误也落库，历史保持完整
+      const messageText = err instanceof Error ? err.message : String(err);
+      const assistantMessage = chatStore.addMessage({
+        sessionId: id,
+        role: 'assistant',
+        content: `本轮处理失败：${messageText}`,
+        metadata: { error: messageText },
+      });
+      emit('error', { message: messageText });
+      emit('message', assistantMessage);
+      emit('done', { ok: false });
+    } finally {
+      if (!reply.raw.writableEnded) reply.raw.end();
+    }
   });
 
   app.get('/u/:user/playbooks/:name', async (req, reply) => {
     const params = req.params as { user: string; name: string };
     if (params.user !== user) return reply.code(404).send({ error: 'not found' });
-    const snapshot = await releases.latestSnapshot(params.name);
+    let snapshot: string | null = null;
+    try {
+      snapshot = await releases.latestSnapshot(params.name);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
     if (!snapshot) return reply.code(404).send({ error: 'playbook has no release' });
     const html = await fsp.readFile(snapshot, 'utf8');
     return reply.type('text/html').send(html);
   });
 
   app.addHook('onClose', async () => {
+    cronService.stop();
+    schedulerStore.close();
     chatStore.close();
   });
 

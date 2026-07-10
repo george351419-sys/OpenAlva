@@ -1,5 +1,6 @@
-import { FormEvent, type ReactElement, useEffect, useMemo, useState } from 'react';
+import { FormEvent, type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   Bot,
   ChevronDown,
   Compass,
@@ -25,6 +26,8 @@ interface ChatMessage {
   id: number;
   role: 'user' | 'assistant' | 'tool';
   content: string;
+  tool_name: string | null;
+  tool_call_id: string | null;
   created_at: number;
 }
 
@@ -34,6 +37,7 @@ interface StreamEvent {
   input?: unknown;
   envelope?: { success: boolean; data?: unknown; error?: { message: string } };
   text?: string;
+  message?: string;
 }
 
 interface ToolEvent {
@@ -52,6 +56,8 @@ export function App(): ReactElement {
   const [draft, setDraft] = useState('');
   const [streamingText, setStreamingText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
+  const conversationRef = useRef<HTMLElement | null>(null);
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeSessionId) ?? null,
     [activeSessionId, sessions],
@@ -65,6 +71,11 @@ export function App(): ReactElement {
     if (!activeSessionId) return;
     void loadMessages(activeSessionId);
   }, [activeSessionId]);
+
+  useEffect(() => {
+    const el = conversationRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, streamingText, toolEvents]);
 
   async function bootstrap(): Promise<void> {
     const loaded = await fetchJson<{ sessions: ChatSession[] }>('/api/chat/sessions');
@@ -103,28 +114,42 @@ export function App(): ReactElement {
     setMessages([]);
     setToolEvents([]);
     setStreamingText('');
+    setErrorText(null);
   }
 
   async function submit(e: FormEvent): Promise<void> {
     e.preventDefault();
     const content = draft.trim();
     if (!content || !activeSessionId || isSending) return;
+    const sessionId = activeSessionId;
     setDraft('');
     setIsSending(true);
     setStreamingText('');
     setToolEvents([]);
+    setErrorText(null);
     setMessages((prev) => [
       ...prev,
-      { id: Date.now(), role: 'user', content, created_at: Date.now() },
+      {
+        id: Date.now(),
+        role: 'user',
+        content,
+        tool_name: null,
+        tool_call_id: null,
+        created_at: Date.now(),
+      },
     ]);
 
     try {
-      await streamChat(activeSessionId, content, handleStreamEvent);
+      await streamChat(sessionId, content, handleStreamEvent);
       const refreshed = await fetchJson<{ sessions: ChatSession[] }>('/api/chat/sessions');
       setSessions(refreshed.sessions);
+    } catch (err) {
+      setErrorText(err instanceof Error ? err.message : String(err));
     } finally {
       setIsSending(false);
       setStreamingText('');
+      // 以服务端为准刷新历史（工具卡从落库的 role=tool 消息恢复）
+      await loadMessages(sessionId).catch(() => undefined);
     }
   }
 
@@ -163,6 +188,11 @@ export function App(): ReactElement {
     }
     if (event === 'message' && 'role' in data) {
       setMessages((prev) => [...prev, data as ChatMessage]);
+      return;
+    }
+    if (event === 'error') {
+      const payload = data as StreamEvent;
+      setErrorText(payload.message ?? '本轮处理失败');
     }
   }
 
@@ -180,7 +210,7 @@ export function App(): ReactElement {
           </button>
         </div>
 
-        <button className="new-chat" onClick={() => void startNewChat()}>
+        <button className="new-chat" onClick={() => void startNewChat()} disabled={isSending}>
           <Plus size={18} />
           New Chat
         </button>
@@ -212,6 +242,7 @@ export function App(): ReactElement {
                 key={session.id}
                 className={`session-item ${session.id === activeSessionId ? 'selected' : ''}`}
                 onClick={() => setActiveSessionId(session.id)}
+                disabled={isSending}
               >
                 <Bot size={15} />
                 <span>{session.title}</span>
@@ -244,7 +275,7 @@ export function App(): ReactElement {
           </button>
         </header>
 
-        <section className="conversation" aria-live="polite">
+        <section className="conversation" aria-live="polite" ref={conversationRef}>
           {messages.length === 0 ? (
             <div className="empty-state">
               <Sparkles size={28} />
@@ -252,8 +283,22 @@ export function App(): ReactElement {
               <p>Market facts go through tools. Playbook builds ask for confirmation first.</p>
             </div>
           ) : (
-            messages.map((message) => <MessageBubble key={message.id} message={message} />)
+            messages.map((message) => {
+              if (message.role === 'tool') {
+                const tool = toolEventFromMessage(message);
+                return tool ? <ToolCard key={`m-${message.id}`} tool={tool} /> : null;
+              }
+              return <MessageBubble key={message.id} message={message} />;
+            })
           )}
+
+          {toolEvents.length > 0 ? (
+            <div className="tool-stack">
+              {toolEvents.map((tool) => (
+                <ToolCard key={tool.id} tool={tool} />
+              ))}
+            </div>
+          ) : null}
 
           {streamingText ? (
             <div className="message assistant">
@@ -264,11 +309,10 @@ export function App(): ReactElement {
             </div>
           ) : null}
 
-          {toolEvents.length > 0 ? (
-            <div className="tool-stack">
-              {toolEvents.map((tool) => (
-                <ToolCard key={tool.id} tool={tool} />
-              ))}
+          {errorText ? (
+            <div className="error-banner" role="alert">
+              <AlertTriangle size={16} />
+              <span>{errorText}</span>
             </div>
           ) : null}
         </section>
@@ -307,6 +351,25 @@ export function App(): ReactElement {
       </main>
     </div>
   );
+}
+
+/** 把落库的 role=tool 消息（content = {input, envelope} JSON）还原成工具卡。 */
+function toolEventFromMessage(message: ChatMessage): ToolEvent | null {
+  try {
+    const parsed = JSON.parse(message.content) as {
+      input?: unknown;
+      envelope?: { success?: boolean };
+    };
+    return {
+      id: message.tool_call_id ?? `tool-${message.id}`,
+      name: message.tool_name ?? 'tool',
+      status: parsed.envelope?.success ? 'completed' : 'failed',
+      input: parsed.input,
+      result: parsed.envelope,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function MessageBubble({ message }: { message: ChatMessage }): ReactElement {

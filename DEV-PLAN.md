@@ -33,7 +33,7 @@
 6. 时间戳差异如实保留：美股 kline `time_close` Unix 秒、crypto ISO 字符串（适配器不做"贴心"归一，blueprint 依赖原样）。
 7. 沙箱模块白名单：`net/http`（undici 包装，签名兼容 `http.fetch/get`）、`secret-manager`（`loadPlaintext`）、`@alva/feed`；超时/内存上限可配。
 
-**Phase 1 隔离信任决定（2026-07-10 审查后登记）**：feed 执行采用进程内 vm 上下文而非 worker/子进程。已加固：`codeGeneration:false` 封死沙箱内直接的 eval/new Function（纵深防御）、超时定时器正确清理、同进程 runFeed 全局串行化、secret 值对 logs/封套脱敏、rows.json/@kv 进程内文件锁。**明确接受的剩余风险（已被测试实证并锁定，防回归误判）**：vm 不是安全边界——`this.constructor.constructor(...)` / `require.constructor(...)` 经宿主对象原型链够到宿主 realm 的 Function 构造器仍可逃逸到 `process`；失控同步循环无法被超时中断；跨进程（CLI 与 server 同时写同一 feed）无锁。理由：单机自用，feed 代码由用户自己的 agent 生成，视为可信。**根治=Phase 3 前置项：升级为子进程/worker 隔离**，`runFeed` API 保持不变。
+**Phase 1 隔离信任决定（2026-07-10 审查后登记；同日已根治升级）**：feed 执行最初采用进程内 vm 上下文，2026-07-10 按计划升级为**一次性子进程隔离**（`runFeed` fork `feedChild` + tsx loader，API 不变）：vm 逃逸（`this.constructor.constructor(...)` 经宿主原型链够到 Function 构造器）只到达可丢弃的沙箱子进程而非 server 进程（有测试断言逃逸拿到的 pid ≠ 宿主 pid）；失控同步循环由宿主超时 SIGKILL 中断（有测试）；`maxHeapSizeMb` 经 `--max-old-space-size` 生效；自定义 httpFetch（Arrays 路由）经 IPC 桥回宿主执行。保留的纵深防御：子进程内 vm `codeGeneration:false`、模块白名单、secret 脱敏、同进程 runFeed 全局串行化。**仍开放的风险**：跨进程（CLI 与 server 同时写同一 feed）无锁——风险登记不变。**已知口径偏差（接受）**：超时/子进程崩溃的失败封套不含子进程已产生的 logs；`timeoutMs` 从 fork 起计，包含约 0.3–1.5s 的子进程启动开销，配置极紧超时的任务需留余量。
 
 ## 2. Phase 0 — 工程基座（0.5 天）
 
@@ -65,6 +65,7 @@
 - [ ] server：会话存储、Claude API tool-use 循环（SSE 流式）、prompt 栈组装（安全→工具→工程→平台规则→prefill）；平台规则=官方 SKILL.md 的 OpenAlva 改写版（路由/ask-first/Content Legitimacy 保留）。
   - [x] 2026-07-10 部分完成：SQLite `chat_sessions/chat_messages`、Phase 3 工具注册/执行 JSON envelope、`/api/chat/sessions/*` SSE 骨架、BTC 数据问答的确定性 `data.call` 路由、playbook 构建 ask-first fallback。
   - [x] 2026-07-10 追加完成：`AgentRunner` 接入 Anthropic Messages API tool-use 回合（`ANTHROPIC_API_KEY` 存在时启用）、tool 名称安全映射（`.` → `__`）、`text_delta/tool_start/tool_result/message/done` SSE 事件；无 key 时保留本地 fallback。prompt 栈当前为精简 OpenAlva 平台规则，官方 SKILL.md 改写版仍待展开。
+  - [x] 2026-07-10 修复轮：改用官方 `@anthropic-ai/sdk` 真流式（`stream:true`，逐 delta 下发 `text_delta`）、`max_tokens` 提至 16384 并显式处理 `stop_reason=max_tokens` 截断；SSE handler 增加错误处理（`error` 事件 + 失败也落库，不再挂死连接）；工具执行历史落库为 `role=tool` 消息（刷新可恢复工具卡、后续轮次回放给模型）；config `defaultUser` 透传 `buildApp`；调度器归 `buildApp` 所有，`deploy.trigger` 与 cron 共享 `CronService` 并发保护；`maxHeapSizeMb` 接通 runFeed；feed 沙箱升级为子进程隔离（见 §1）。
 - [ ] 工具面注册（F2）：fs/run/deploy/release/data.call/screenshot/skills，schema 即 JSON Schema；blueprint 技能加载（`skills/` 目录：官方 7 个 blueprint + Portfolio-Watch-Skill）。
   - [x] 2026-07-10 部分完成：`fs.read/write/readdir/stat/mkdir/grant`、`run`、`deploy.create/list/get/pause/resume/delete/trigger/runs`、`data.call`、`skills.list/get` 已注册。
   - [x] 2026-07-10 追加完成：`release.playbookDraft`、`release.playbook` 已注册并测试覆盖；`screenshot`、blueprint 技能加载待补。

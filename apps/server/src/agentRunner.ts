@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk';
 import type { AgentTools, ToolEnvelope, ToolSpec } from './agentTools.js';
 import type { ChatMessage } from './chatStore.js';
 
@@ -15,54 +16,39 @@ export interface AgentRunnerOptions {
   model?: string;
   fetchImpl?: typeof fetch;
   maxToolRounds?: number;
-}
-
-type AnthropicContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'tool_use'; id: string; name: string; input: unknown };
-
-interface AnthropicMessage {
-  role: 'user' | 'assistant';
-  content: string | AnthropicContentBlock[] | AnthropicToolResultBlock[];
-}
-
-interface AnthropicToolResultBlock {
-  type: 'tool_result';
-  tool_use_id: string;
-  content: string;
-  is_error?: boolean;
-}
-
-interface AnthropicResponse {
-  id: string;
-  type: 'message';
-  role: 'assistant';
-  content: AnthropicContentBlock[];
-  stop_reason: string | null;
-  usage?: unknown;
+  maxTokens?: number;
 }
 
 export class AgentRunner {
-  private readonly apiKey?: string;
+  private readonly client?: Anthropic;
   private readonly model: string;
-  private readonly fetchImpl: typeof fetch;
   private readonly maxToolRounds: number;
+  private readonly maxTokens: number;
 
   constructor(private readonly opts: AgentRunnerOptions) {
-    this.apiKey = opts.apiKey;
     this.model = opts.model ?? 'claude-fable-5';
-    this.fetchImpl = opts.fetchImpl ?? fetch;
     this.maxToolRounds = opts.maxToolRounds ?? 8;
+    this.maxTokens = opts.maxTokens ?? 16_384;
+    if (opts.apiKey) {
+      this.client = new Anthropic({
+        apiKey: opts.apiKey,
+        ...(opts.fetchImpl ? { fetch: opts.fetchImpl } : {}),
+      });
+    }
   }
 
   async run(input: { messages: ChatMessage[]; latestMessage: string; emit: AgentEmit }): Promise<AgentResponse> {
-    if (!this.apiKey) {
+    if (!this.client) {
       return runDeterministicAgent(input.latestMessage, this.opts.tools, input.emit);
     }
-    return this.runClaude(input.messages, input.emit);
+    return this.runClaude(this.client, input.messages, input.emit);
   }
 
-  private async runClaude(messages: ChatMessage[], emit: AgentEmit): Promise<AgentResponse> {
+  private async runClaude(
+    client: Anthropic,
+    messages: ChatMessage[],
+    emit: AgentEmit,
+  ): Promise<AgentResponse> {
     let apiMessages = toAnthropicMessages(messages);
     const toolNameMap = new Map<string, string>();
     const anthropicTools = this.opts.tools.specs().map((tool) => toAnthropicTool(tool, toolNameMap));
@@ -70,21 +56,39 @@ export class AgentRunner {
     const toolCalls: { name: string; success: boolean }[] = [];
 
     for (let round = 0; round < this.maxToolRounds; round += 1) {
-      const response = await this.createMessage({
+      const stream = client.messages.stream({
+        model: this.model,
+        max_tokens: this.maxTokens,
+        system: systemPrompt(),
         messages: apiMessages,
         tools: anthropicTools,
       });
-      const assistantBlocks = response.content;
-      apiMessages = [...apiMessages, { role: 'assistant', content: assistantBlocks }];
+      stream.on('text', (delta) => {
+        textParts.push(delta);
+        emit('text_delta', { text: delta });
+      });
+      const message = await stream.finalMessage();
+      apiMessages = [...apiMessages, { role: 'assistant', content: message.content }];
 
-      const toolUses = assistantBlocks.filter(isToolUseBlock);
-      for (const block of assistantBlocks) {
-        if (block.type === 'text' && block.text) {
-          textParts.push(block.text);
-          emit('text_delta', { text: block.text });
-        }
+      if (message.stop_reason === 'max_tokens') {
+        // 截断时 tool_use 输入可能不完整，不执行，直接如实报告
+        const notice = '\n\n[本轮输出达到 max_tokens 上限被截断，以上内容可能不完整。]';
+        emit('text_delta', { text: notice });
+        return {
+          content: textParts.join('') + notice,
+          metadata: {
+            route: 'claude-tool-use',
+            model: this.model,
+            rounds: round + 1,
+            toolCalls,
+            truncated: true,
+          },
+        };
       }
 
+      const toolUses = message.content.filter(
+        (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use',
+      );
       if (toolUses.length === 0) {
         const content = textParts.join('').trim();
         return {
@@ -93,17 +97,18 @@ export class AgentRunner {
         };
       }
 
-      const toolResults: AnthropicToolResultBlock[] = [];
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
       for (const toolUse of toolUses) {
         const originalName = toolNameMap.get(toolUse.name) ?? toolUse.name;
         emit('tool_start', { id: toolUse.id, name: originalName, input: toolUse.input });
         const envelope = await this.opts.tools.execute(originalName, toolUse.input);
-        emit('tool_result', { id: toolUse.id, name: originalName, envelope });
+        emit('tool_result', { id: toolUse.id, name: originalName, input: toolUse.input, envelope });
         toolCalls.push({ name: originalName, success: envelope.success });
         toolResults.push({
           type: 'tool_result',
           tool_use_id: toolUse.id,
-          content: JSON.stringify(envelope),
+          // 上限防大文件 fs.read 之类的结果撑爆上下文
+          content: truncate(JSON.stringify(envelope), 20_000),
           ...(envelope.success ? {} : { is_error: true }),
         });
       }
@@ -117,56 +122,37 @@ export class AgentRunner {
       metadata: { route: 'claude-tool-use', model: this.model, max_rounds_hit: true, toolCalls },
     };
   }
-
-  private async createMessage(input: {
-    messages: AnthropicMessage[];
-    tools: ReturnType<typeof toAnthropicTool>[];
-  }): Promise<AnthropicResponse> {
-    const resp = await this.fetchImpl('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'x-api-key': this.apiKey!,
-      },
-      body: JSON.stringify({
-        model: this.model,
-        max_tokens: 2048,
-        system: systemPrompt(),
-        messages: input.messages,
-        tools: input.tools,
-      }),
-    });
-    const text = await resp.text();
-    if (!resp.ok) {
-      throw new Error(`Claude API failed (${resp.status}): ${text.slice(0, 500)}`);
-    }
-    return JSON.parse(text) as AnthropicResponse;
-  }
 }
 
-function toAnthropicMessages(messages: ChatMessage[]): AnthropicMessage[] {
-  const out: AnthropicMessage[] = [];
+function toAnthropicMessages(messages: ChatMessage[]): Anthropic.MessageParam[] {
+  const out: Anthropic.MessageParam[] = [];
   for (const msg of messages) {
     if (msg.role === 'user' || msg.role === 'assistant') {
-      out.push({ role: msg.role, content: msg.content });
+      if (msg.content) out.push({ role: msg.role, content: msg.content });
+    } else if (msg.role === 'tool') {
+      // 历史工具执行以文本回放到上下文（连续同角色消息 API 会自动合并成一轮）
+      out.push({
+        role: 'user',
+        content: `[之前的工具执行记录 ${msg.tool_name ?? ''}] ${truncate(msg.content, 2_000)}`,
+      });
     }
   }
-  return out.length > 0 ? out : [{ role: 'user', content: '' }];
+  return out.length > 0 ? out : [{ role: 'user', content: '(empty)' }];
 }
 
-function toAnthropicTool(tool: ToolSpec, map: Map<string, string>): {
-  name: string;
-  description: string;
-  input_schema: Record<string, unknown>;
-} {
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…[truncated]` : text;
+}
+
+function toAnthropicTool(tool: ToolSpec, map: Map<string, string>): Anthropic.Tool {
+  // API 工具名只允许 [a-zA-Z0-9_-]，'.' 需映射
   const safeName = tool.name.replaceAll('.', '__');
   map.set(safeName, tool.name);
-  return { name: safeName, description: tool.description, input_schema: tool.input_schema };
-}
-
-function isToolUseBlock(block: AnthropicContentBlock): block is Extract<AnthropicContentBlock, { type: 'tool_use' }> {
-  return block.type === 'tool_use';
+  return {
+    name: safeName,
+    description: tool.description,
+    input_schema: tool.input_schema as Anthropic.Tool.InputSchema,
+  };
 }
 
 function systemPrompt(): string {
@@ -203,7 +189,7 @@ async function runDeterministicAgent(
     };
     emit('tool_start', { id: toolCallId, name: 'data.call', input });
     const envelope = await tools.execute('data.call', input);
-    emit('tool_result', { id: toolCallId, name: 'data.call', envelope });
+    emit('tool_result', { id: toolCallId, name: 'data.call', input, envelope });
     if (!envelope.success) {
       return {
         content: `我尝试通过 data.call 读取 BTC 行情，但数据源返回：${envelope.error?.message ?? 'unknown error'}。我不会用记忆补行情数据。`,

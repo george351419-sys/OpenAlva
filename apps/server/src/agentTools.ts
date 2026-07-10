@@ -1,7 +1,7 @@
-import { Alfs, openAlvaPaths } from '@openalva/alfs';
+import { Alfs } from '@openalva/alfs';
 import { ArraysViaAlvaSource, DataError, loadCatalog, type DataSource } from '@openalva/data';
 import { runFeed } from '@openalva/feed-runtime';
-import { CronService, SchedulerStore } from '@openalva/scheduler';
+import type { CronService, SchedulerStore } from '@openalva/scheduler';
 import { ReleaseService } from './releaseService.js';
 
 export interface ToolEnvelope<T = unknown> {
@@ -23,6 +23,12 @@ export interface AgentToolsOptions {
   root: string;
   user: string;
   dataSource?: DataSource;
+  /**
+   * 与常驻调度器共享同一 store/service 实例：deploy.trigger 才能命中
+   * CronService 的同任务并发保护，且不再每次调用新开 SQLite 连接。
+   */
+  schedulerStore: SchedulerStore;
+  cronService: CronService;
 }
 
 export class AgentTools {
@@ -239,44 +245,39 @@ export class AgentTools {
   }
 
   private async executeDeploy(name: string, input: Record<string, unknown>): Promise<unknown> {
-    const store = new SchedulerStore(openAlvaPaths(this.opts.root).dbFile);
-    try {
-      switch (name) {
-        case 'deploy.create':
-          return store.create({
-            name: reqString(input, 'name'),
-            user: this.opts.user,
-            entryPath: reqString(input, 'entryPath'),
-            cron: reqString(input, 'cron'),
-            ...(typeof input['pushNotify'] === 'boolean'
-              ? { pushNotify: input['pushNotify'] }
-              : {}),
-            ...(typeof input['maxHeapSizeMb'] === 'number'
-              ? { maxHeapSizeMb: input['maxHeapSizeMb'] }
-              : {}),
-          });
-        case 'deploy.list':
-          return { jobs: store.list(this.opts.user) };
-        case 'deploy.get':
-          return store.get(reqNumber(input, 'id')) ?? null;
-        case 'deploy.pause':
-          return store.setStatus(reqNumber(input, 'id'), 'paused') ?? null;
-        case 'deploy.resume':
-          return store.setStatus(reqNumber(input, 'id'), 'active') ?? null;
-        case 'deploy.delete':
-          return store.setStatus(reqNumber(input, 'id'), 'deleted') ?? null;
-        case 'deploy.runs':
-          return { runs: store.runs(reqNumber(input, 'id'), optNumber(input, 'limit') ?? 20) };
-        case 'deploy.trigger': {
-          const service = new CronService(store, this.opts.root);
-          const job = await service.execute(reqNumber(input, 'id'), 'manual');
-          return { job, latest_run: store.runs(reqNumber(input, 'id'), 1)[0] ?? null };
-        }
-        default:
-          throw new Error(`Unknown tool: ${name}`);
+    const store = this.opts.schedulerStore;
+    switch (name) {
+      case 'deploy.create':
+        return store.create({
+          name: reqString(input, 'name'),
+          user: this.opts.user,
+          entryPath: reqString(input, 'entryPath'),
+          cron: reqString(input, 'cron'),
+          ...(typeof input['pushNotify'] === 'boolean'
+            ? { pushNotify: input['pushNotify'] }
+            : {}),
+          ...(typeof input['maxHeapSizeMb'] === 'number'
+            ? { maxHeapSizeMb: input['maxHeapSizeMb'] }
+            : {}),
+        });
+      case 'deploy.list':
+        return { jobs: store.list(this.opts.user) };
+      case 'deploy.get':
+        return store.get(reqNumber(input, 'id')) ?? null;
+      case 'deploy.pause':
+        return store.setStatus(reqNumber(input, 'id'), 'paused') ?? null;
+      case 'deploy.resume':
+        return store.setStatus(reqNumber(input, 'id'), 'active') ?? null;
+      case 'deploy.delete':
+        return store.setStatus(reqNumber(input, 'id'), 'deleted') ?? null;
+      case 'deploy.runs':
+        return { runs: store.runs(reqNumber(input, 'id'), optNumber(input, 'limit') ?? 20) };
+      case 'deploy.trigger': {
+        const job = await this.opts.cronService.execute(reqNumber(input, 'id'), 'manual');
+        return { job, latest_run: store.runs(reqNumber(input, 'id'), 1)[0] ?? null };
       }
-    } finally {
-      store.close();
+      default:
+        throw new Error(`Unknown tool: ${name}`);
     }
   }
 }

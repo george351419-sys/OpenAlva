@@ -98,26 +98,27 @@ describe('server app', () => {
       method: 'GET',
       url: `/api/chat/sessions/${sessionId}/messages`,
     });
-    expect(messages.json<{ messages: { role: string }[] }>().messages.map((m) => m.role)).toEqual([
-      'user',
-      'assistant',
-    ]);
+    const stored = messages.json<{
+      messages: { role: string; tool_name: string | null; content: string }[];
+    }>().messages;
+    // 工具执行历史落库为 role=tool，刷新后 UI/模型都能看到
+    expect(stored.map((m) => m.role)).toEqual(['user', 'tool', 'assistant']);
+    expect(stored[1]!.tool_name).toBe('data.call');
+    expect(JSON.parse(stored[1]!.content)).toMatchObject({
+      envelope: { success: true },
+    });
 
     await app.close();
   });
 
-  it('runs a Claude-style tool-use loop when an API key is configured', async () => {
+  it('runs a streaming Claude tool-use loop when an API key is configured', async () => {
     const source = new StubDataSource([{ time_close: 2, price_close: 110 }]);
-    const fetchCalls: unknown[] = [];
+    const fetchCalls: { stream?: boolean }[] = [];
     const fakeFetch: typeof fetch = async (_url, init) => {
-      fetchCalls.push(JSON.parse(String(init?.body)));
+      fetchCalls.push(JSON.parse(String(init?.body)) as { stream?: boolean });
       if (fetchCalls.length === 1) {
-        return jsonResponse({
-          id: 'msg_1',
-          type: 'message',
-          role: 'assistant',
-          stop_reason: 'tool_use',
-          content: [
+        return sseMessageResponse(
+          [
             { type: 'text', text: '我先取实时数据。' },
             {
               type: 'tool_use',
@@ -130,15 +131,10 @@ describe('server app', () => {
               },
             },
           ],
-        });
+          'tool_use',
+        );
       }
-      return jsonResponse({
-        id: 'msg_2',
-        type: 'message',
-        role: 'assistant',
-        stop_reason: 'end_turn',
-        content: [{ type: 'text', text: 'BTC 最新价约 110。' }],
-      });
+      return sseMessageResponse([{ type: 'text', text: 'BTC 最新价约 110。' }], 'end_turn');
     };
     const app = await buildApp({
       root: tmpDir,
@@ -167,7 +163,53 @@ describe('server app', () => {
     expect(stream.body).toContain('"name":"data.call"');
     expect(stream.body).toContain('BTC 最新价约 110。');
     expect(fetchCalls).toHaveLength(2);
+    expect(fetchCalls[0]!.stream).toBe(true); // 真流式：请求必须带 stream:true
     expect(source.calls).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('reports Claude API failures over SSE instead of hanging the stream', async () => {
+    const fakeFetch: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          type: 'error',
+          error: { type: 'invalid_request_error', message: 'boom from api' },
+        }),
+        { status: 400, headers: { 'content-type': 'application/json' } },
+      );
+    const app = await buildApp({
+      root: tmpDir,
+      user: 'george',
+      anthropicApiKey: 'test-key',
+      anthropicModel: 'claude-test',
+      fetchImpl: fakeFetch,
+    });
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/chat/sessions',
+      payload: { title: 'Error path' },
+    });
+    const sessionId = created.json<{ session: { id: string } }>().session.id;
+    const stream = await app.inject({
+      method: 'POST',
+      url: `/api/chat/sessions/${sessionId}/stream`,
+      payload: { message: '随便聊聊' },
+    });
+
+    expect(stream.statusCode).toBe(200);
+    expect(stream.body).toContain('event: error');
+    expect(stream.body).toContain('boom from api');
+    expect(stream.body).toContain('"ok":false');
+
+    const messages = await app.inject({
+      method: 'GET',
+      url: `/api/chat/sessions/${sessionId}/messages`,
+    });
+    const roles = messages.json<{ messages: { role: string; content: string }[] }>().messages;
+    expect(roles.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(roles[1]!.content).toContain('本轮处理失败');
 
     await app.close();
   });
@@ -267,9 +309,72 @@ class StubDataSource implements DataSource {
   }
 }
 
-function jsonResponse(body: unknown): Response {
-  return new Response(JSON.stringify(body), {
+type FakeBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> };
+
+/** 构造 Anthropic Messages API 流式（SSE）假响应，形状同真实 stream:true 返回。 */
+function sseMessageResponse(blocks: FakeBlock[], stopReason: string): Response {
+  const events: { event: string; data: unknown }[] = [
+    {
+      event: 'message_start',
+      data: {
+        type: 'message_start',
+        message: {
+          id: 'msg_fake',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude-test',
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 10, output_tokens: 1 },
+        },
+      },
+    },
+  ];
+  blocks.forEach((block, index) => {
+    if (block.type === 'text') {
+      events.push({
+        event: 'content_block_start',
+        data: { type: 'content_block_start', index, content_block: { type: 'text', text: '' } },
+      });
+      events.push({
+        event: 'content_block_delta',
+        data: { type: 'content_block_delta', index, delta: { type: 'text_delta', text: block.text } },
+      });
+    } else {
+      events.push({
+        event: 'content_block_start',
+        data: {
+          type: 'content_block_start',
+          index,
+          content_block: { type: 'tool_use', id: block.id, name: block.name, input: {} },
+        },
+      });
+      events.push({
+        event: 'content_block_delta',
+        data: {
+          type: 'content_block_delta',
+          index,
+          delta: { type: 'input_json_delta', partial_json: JSON.stringify(block.input) },
+        },
+      });
+    }
+    events.push({ event: 'content_block_stop', data: { type: 'content_block_stop', index } });
+  });
+  events.push({
+    event: 'message_delta',
+    data: {
+      type: 'message_delta',
+      delta: { stop_reason: stopReason, stop_sequence: null },
+      usage: { output_tokens: 5 },
+    },
+  });
+  events.push({ event: 'message_stop', data: { type: 'message_stop' } });
+  const body = events.map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`).join('');
+  return new Response(body, {
     status: 200,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'text/event-stream; charset=utf-8' },
   });
 }
