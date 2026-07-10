@@ -1,6 +1,6 @@
 # OpenAlva - DEV Plan
 
-> 版本：v1.0（2026-07-09）｜当前进度：**Phase 1 完成（2026-07-10），下一步 Phase 2**
+> 版本：v1.0（2026-07-09）｜当前进度：**Phase 3 Chat 主链路部分完成，Phase 4 最小发布面部分完成；下一步 screenshot/lint 门禁 + Explore 门户 + chart artifact**
 > 上游文档：`Product-Spec.md`（功能与范围）、`Design-Brief.md`（视觉裁决）、`逆向材料/Alva系统架构综合.md`（平台行为）、`Portfolio-Watch-Skill/AGENTS.md` §5（实战坑）。
 > 每个 Phase 内任务可独立验证；Phase 完成 = 验收命令通过 + 两阶段 review 通过 + 原子提交。
 
@@ -19,7 +19,7 @@
   vendor/design-system   官方 css/tokens/contract 原件（不改）
   ```
 - 元数据 SQLite（`~/.openalva/openalva.db`）：playbook 索引、cron 与 run 日志、会话、用量账本。文件真相在 `~/.openalva/home/<user>/`。
-- **git：Phase 0 第一件事就是 `git init` + 初始提交（当前项目还不是仓库）。**
+- **git：Phase 0 第一件事就是 `git init` + 初始提交。** 当前项目已是 git 仓库；后续每个完成单元需原子提交。
 
 ## 1. 必须遵守的平台行为（从实战坑固化为测试）
 
@@ -44,30 +44,41 @@
 
 ## 3. Phase 1 — ALFS + Feed 运行时 + 调度器（2-3 天，平台心脏）
 
-- [ ] `packages/alfs`：路径解析（`~` 展开到 `home/<user>`）、read/write/readdir/stat/mkdir/remove、`@last/<N>` 读取、ts 桶存储（JSONL 分桶文件）、`@kv`、grant/revoke 存根（单机恒真）。§1 语义单测全绿。
-- [ ] `packages/feed-runtime`：worker_threads 沙箱 + 模块白名单 + `@alva/feed` 实现（`Feed/feedPath/makeDoc/str/num/feed.def/ctx.self.ts().append/ctx.kv`），执行日志捕获（logs/result/stats 封套同 alva run）。
-- [ ] 调度器：croner + SQLite run 记录；`deploy create/list/get/pause/resume/delete/trigger`；失败重试与连续失败计数。
-- [ ] `packages/cli`：`openalva fs|run|deploy` 子命令（JSON 输出封套同 alva CLI）。
-- **验收（关键）**：参考实现 `逆向材料/参考实现/crypto-top5-watch/feed-src-index.js` **原样**（仅数据源经 Phase 2 前的临时 mock provider）在 OpenAlva 跑通：`data/watch/*` 五组输出生成，`openalva fs read --path '.../watch/assets/@last/50'` 返回正确条数与最新桶。
+- [x] `packages/alfs`：路径解析（`~` 展开到 `home/<user>`）、read/write/readdir/stat/mkdir/remove、`@last/<N>` 读取、ts 桶存储（JSONL 分桶文件）、`@kv`、grant/revoke 存根（单机恒真）。§1 语义单测全绿。
+- [x] `packages/feed-runtime`：进程内 vm 沙箱 + 模块白名单 + `@alva/feed` 实现（`Feed/feedPath/makeDoc/str/num/feed.def/ctx.self.ts().append/ctx.kv`），执行日志捕获（logs/result/stats 封套同 alva run）。worker_threads/子进程隔离已登记为后续加固项。
+- [x] 调度器：croner + SQLite run 记录；`deploy create/list/get/pause/resume/delete/trigger`；连续失败计数。
+- [x] `packages/cli`：`openalva fs|run|deploy` 子命令（JSON 输出封套同 alva CLI）。
+- **验收（关键）**：✅ 参考实现 `逆向材料/参考实现/crypto-top5-watch/feed-src-index.js` 原样经合成 Arrays mock 跑通，生成 `data/watch/*` 五组输出；CLI `fs read` 可读 `@last/N`。
 
-## 4. Phase 2 — 数据层（1-2 天）
+## 4. Phase 2 — 数据层（完成 2026-07-10）
 
-- [ ] 目录镜像脚本：`alva data-skills list/summary/endpoint` 全量拉取 → `packages/data/catalog/*.md`（含 19 skill 描述与端点 schema；记录 tier）。
-- [ ] DataSource 适配器接口 + `arrays-via-alva` driver：模板化生成沙箱取数代码 → `alva run` 子进程 → logs JSON 解析 → `{success,data[],request_id}` 封套；错误分类（网络/鉴权/pro-gated→「数据源未配置」结构化错误）。
-- [ ] 本地 secrets 库（加密存储，`secret-manager.loadPlaintext` 从这里读）。
-- **验收**：三个 public 端点实测真数据（Binance BTC kline、stocks/kline AAPL、macro treasury）；pro 端点返回结构化未配置错误；Phase 1 的 crypto-top5-watch 换真实 driver 重跑成功。
+- [x] 目录镜像脚本（`packages/data/src/mirror.ts`）：`alva data-skills list/summary/endpoint` 全量拉取 → `packages/data/catalog/`（catalog.json 索引 + docs/<skill>/<endpoint>.md）。**实测镜像：19 skills / 111 endpoints（59 public / 52 pro-gated）**。单端点文档失败容错（如 file 名 "list" 撞 CLI 保留字）。
+- [x] DataSource 适配器接口 + `arrays-via-alva` driver（`packages/data/src/arraysViaAlva.ts`）：本地拼 URL、模板化生成取数代码 → `alva run` → 哨兵包裹的 logs → `{success,data[],request_id}`；错误分类 PRO_GATED/AUTH/UPSTREAM/PARSE/SOURCE_UNAVAILABLE。pro-gated 本地即拒，不发往返。
+- [x] 路由型 httpFetch（`packages/data/src/arraysRouting.ts`）：拦截 feed 对 Arrays 主机的 `http.fetch`，透明转发到云沙箱（JWT 在那里），非 Arrays 请求走 fallback。**使参考实现 feed 无需改动即可本地跑真数据。**
+- [x] 本地 secrets 库（`~/.openalva/secrets.json`，`secret-manager.loadPlaintext` 读）；init 播种 `ARRAYS_JWT` 占位。
+- **验收**：✅ 2026-07-10 live 实测 —— public 端点（Binance BTC kline）经 arrays-via-alva 取到真数据零 credit；pro 端点（insider-transactions）本地 PRO_GATED 拒绝；**crypto-top5-watch 经路由驱动完整重跑成功（48.7s / 28 次云调用，真实行情 BTC@63230 ETH@1745 BNB@569 XRP@1 SOL@78）**。43 单测全绿。
+
+**Arrays 鉴权约定（集成事实，已固化）**：Arrays JWT 只在 Alva 云沙箱 secrets 里，本地不持有。feed 会本地守卫 `secret.loadPlaintext("ARRAYS_JWT")` 后才发请求，故 init 播种占位值 `routed-via-alva` 让守卫通过；feed 设的 `Bearer <占位>` 被路由层丢弃，云端注入真 JWT。占位绝非真实凭证。风险仍在：链路挂在用户 Alva 账号（账号失效/免费策略变更即断供）→ Phase 6 的 native driver 是解绑方案。
 
 ## 5. Phase 3 — Agent 编排 + Chat 前端（3-4 天）
 
 - [ ] server：会话存储、Claude API tool-use 循环（SSE 流式）、prompt 栈组装（安全→工具→工程→平台规则→prefill）；平台规则=官方 SKILL.md 的 OpenAlva 改写版（路由/ask-first/Content Legitimacy 保留）。
+  - [x] 2026-07-10 部分完成：SQLite `chat_sessions/chat_messages`、Phase 3 工具注册/执行 JSON envelope、`/api/chat/sessions/*` SSE 骨架、BTC 数据问答的确定性 `data.call` 路由、playbook 构建 ask-first fallback。
+  - [x] 2026-07-10 追加完成：`AgentRunner` 接入 Anthropic Messages API tool-use 回合（`ANTHROPIC_API_KEY` 存在时启用）、tool 名称安全映射（`.` → `__`）、`text_delta/tool_start/tool_result/message/done` SSE 事件；无 key 时保留本地 fallback。prompt 栈当前为精简 OpenAlva 平台规则，官方 SKILL.md 改写版仍待展开。
 - [ ] 工具面注册（F2）：fs/run/deploy/release/data.call/screenshot/skills，schema 即 JSON Schema；blueprint 技能加载（`skills/` 目录：官方 7 个 blueprint + Portfolio-Watch-Skill）。
+  - [x] 2026-07-10 部分完成：`fs.read/write/readdir/stat/mkdir/grant`、`run`、`deploy.create/list/get/pause/resume/delete/trigger/runs`、`data.call`、`skills.list/get` 已注册。
+  - [x] 2026-07-10 追加完成：`release.playbookDraft`、`release.playbook` 已注册并测试覆盖；`screenshot`、blueprint 技能加载待补。
 - [ ] web：Sidebar+Chat 页（Design-Brief §4.1/4.2）；工具执行折叠卡；chart artifact iframe 卡；模型选择器。
+  - [x] 2026-07-10 部分完成：新增 `apps/web` React+Vite；Sidebar + Chat 页、会话列表、消息流、POST SSE 解析、工具执行折叠卡、模型选择器静态控件；server 构建后可托管 `apps/web/dist`。chart artifact iframe 卡和真实模型切换待补。
 - **验收**：对话「BTC 最近 7 天表现如何」→ agent 经 data.call 取真数据、流式回答 + 一个符合设计规范的 chart artifact；对话「帮我建个 playbook」→ 走 ask-first gate 先确认。
+  - 2026-07-10 当前可验收子集：后端 SSE 能触发 `data.call` 并持久化消息（测试使用 StubDataSource）；Claude-style tool-use loop 已用 fake Anthropic response 覆盖；`pnpm build:web` 通过。真实 chart artifact 待补。
 
 ## 6. Phase 4 — 发布流水线 + 门户（2-3 天）
 
 - [ ] release：`playbook-draft`/`playbook`（playbook.json 兼容 schema、feeds 绑定校验、changelog）；release 快照复制到 `pb-static/<user>/<name>/<version>/`（不可变）；live 路由 `/u/<user>/playbooks/<name>`。
+  - [x] 2026-07-10 部分完成：新增 `ReleaseService`，支持创建/更新 draft playbook 目录与 `playbook.json`，发布 `index.html` 到 `pb-static/<user>/<name>/<version>/`，更新 `latest_release`，并提供 `/u/<user>/playbooks/<name>` live URL。feeds 产出校验、changelog AI 草稿、完整 schema 兼容仍待补。
 - [ ] 浏览器 SDK（`OpenAlva.Client().fs.read`，参数形态兼容 AlvaToolkit）；lint 门禁（移植 design-contract.yaml 核心规则：容器/滚动/字重/链接/overflow）；screenshot（Playwright）。
+  - [x] 2026-07-10 部分完成：`/openalva/v1/client.js` 提供最小 `OpenAlva.Client().fs.read({path})`，通过 `/api/tools/fs.read` 读取 ALFS。lint 门禁和 screenshot 待补。
 - [ ] Explore 门户 + 详情页（Design-Brief §4.3/4.4）；浏览数统计。
 - **验收**：crypto-top5-watch 的 index.html（仅改 FEED_ROOT 与 SDK 名）本地发布 → URL 打开渲染真数据 → lint 通过 → Explore 出现卡片带截图。
 

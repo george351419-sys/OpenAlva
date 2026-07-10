@@ -33,7 +33,14 @@ export async function initOpenAlvaRoot(
   }
 
   await writeIfMissing(paths.configFile, JSON.stringify({ defaultUser: user }, null, 2) + '\n');
-  await writeIfMissing(paths.secretsFile, '{}\n', 0o600);
+  // ARRAYS_JWT 占位：参考实现类 feed 会在本地守卫 secret.loadPlaintext("ARRAYS_JWT")
+  // 后才发请求。真实 Arrays 鉴权由 arrays-via-alva 路由层用云端 JWT 完成，
+  // 本地这个占位仅用于让守卫通过；其值被路由层丢弃，绝不作为真实凭证。
+  await writeIfMissing(
+    paths.secretsFile,
+    JSON.stringify({ ARRAYS_JWT: 'routed-via-alva' }, null, 2) + '\n',
+    0o600,
+  );
 
   return { root, user, createdHome };
 }

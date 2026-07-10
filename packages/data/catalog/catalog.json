@@ -1,0 +1,1266 @@
+{
+  "mirrored_at": "2026-07-10T00:37:10.374Z",
+  "base_url": "https://data-tools.prd.space.id",
+  "skills": [
+    {
+      "name": "arrays-data-api-company-crypto-holdings",
+      "description": "Guides the agent to call Arrays REST APIs for company crypto holdings. Use when the user needs data about which companies hold crypto.",
+      "endpoint_count": 1,
+      "pro_count": 1,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-company-crypto-holdings",
+          "file": "crypto-holdings",
+          "method": "GET",
+          "path": "/api/v1/crypto/holdings",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-crypto-analytics-passthrough",
+      "description": "Forwards an arbitrary on-chain crypto analytics path + query string to the upstream provider through one Arrays passthrough route (GET /api/v1/crypto/analytics/query), unlocking ~245 endpoints. Use it for on-chain analytics that the dedicated crypto skills do NOT already cover — network-data (fees, hashrate, UTXO, addresses, supply), most network/market/flow indicators, miner flows, entity/inter-entity flows, fund-data, eth2, AMM/DEX data across BTC/ETH/XRP/TRX/ERC20/stablecoin — or when the user names a specific upstream metric/path, or asks what on-chain analytics endpoints are available. Do NOT use it when a dedicated endpoint already exists -- MVRV, NUPL, SOPR, realized price, SSR, Puell multiple, leverage ratio, whale ratio, inflow CDD, miner-to-exchange (use arrays-data-api-crypto-metrics-and-screener) and exchange inflow/outflow/netflow (use arrays-data-api-crypto-exchange-flow); crypto futures funding/open-interest/long-short come from a different source (use arrays-data-api-crypto-futures-data).",
+      "endpoint_count": 0,
+      "pro_count": 0,
+      "endpoints": []
+    },
+    {
+      "name": "arrays-data-api-crypto-exchange-flow",
+      "description": "Guides the agent to call Arrays REST APIs for crypto exchange flow data. Use when the user needs exchange inflow/outflow/netflow data for cryptocurrencies.",
+      "endpoint_count": 1,
+      "pro_count": 1,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-crypto-exchange-flow",
+          "file": "exchange-flows",
+          "method": "GET",
+          "path": "/api/v1/crypto/exchange-flows",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-crypto-futures-data",
+      "description": "Calls Arrays REST APIs for crypto derivatives data — perpetual K-line / OHLCV / candlestick (Binance USDT perp and Hyperliquid USDC perp, including HIP-3 tokenized equities like AAPL, TSLA), funding rates, open interest, long-short ratios, and taker buy/sell volume. Use when the user asks about perpetual futures price or volume, perp candles, funding costs, leveraged positions, derivatives market sentiment, futures data for any cryptocurrency, or any HIP-3 listing on Hyperliquid.",
+      "endpoint_count": 6,
+      "pro_count": 1,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-crypto-futures-data",
+          "file": "binance-perp-usdt-kline",
+          "method": "GET",
+          "path": "/api/v1/crypto/binance/perp/usdt/kline",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-crypto-futures-data",
+          "file": "funding-rate",
+          "method": "GET",
+          "path": "/api/v1/crypto/funding-rate",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-crypto-futures-data",
+          "file": "hyperliquid-perp-usdc-kline",
+          "method": "GET",
+          "path": "/api/v1/crypto/hyperliquid/perp/usdc/kline",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-crypto-futures-data",
+          "file": "long-short-ratio",
+          "method": "GET",
+          "path": "/api/v1/crypto/long-short-ratio",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-crypto-futures-data",
+          "file": "open-interest",
+          "method": "GET",
+          "path": "/api/v1/crypto/open-interest",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-crypto-futures-data",
+          "file": "taker-buy-sell-volume",
+          "method": "GET",
+          "path": "/api/v1/crypto/taker-buy-sell-volume",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-crypto-metrics-and-screener",
+      "description": "Calls Arrays REST APIs for crypto on-chain analytics and screening — token metadata profile (name, category, description, logo, contract addresses per chain, official URLs), market cap, circulating/total supply, fear & greed index, on-chain metrics (MVRV, NUPL, SOPR, realized price, leverage ratio, SSR, whale ratio, Puell multiple, miner-to-exchange, inflow CDD), crypto metrics screener, token unlock schedules (cliff and linear allocations for DeFi protocols like Hyperliquid, Arbitrum, Uniswap, etc.), and Bitcoin correlation indices. Use when the user asks about a token's metadata/profile (full name, category, description, logo, contract addresses, website/twitter/explorer links), crypto market cap, token supply, crypto market sentiment, on-chain analysis, token screening, protocol token unlock events and vesting schedules, or Bitcoin correlation with other assets.",
+      "endpoint_count": 19,
+      "pro_count": 12,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "fear-greed-index",
+          "method": "GET",
+          "path": "/api/v1/crypto/fear-greed-index",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "list",
+          "method": "GET",
+          "path": "/api/v1/crypto/list",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "crypto-market-cap",
+          "method": "GET",
+          "path": "/api/v1/crypto/market-cap",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "market-metrics",
+          "method": "GET",
+          "path": "/api/v1/crypto/market-metrics",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "screener-metrics",
+          "method": "GET",
+          "path": "/api/v1/crypto/screener/metrics",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "screener-metrics-timerange",
+          "method": "GET",
+          "path": "/api/v1/crypto/screener/metrics/timerange",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "trading-pair",
+          "method": "GET",
+          "path": "/api/v1/crypto/trading-pair",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "metrics-inflow-cdd",
+          "method": "GET",
+          "path": "/api/v1/crypto/metrics/inflow-cdd",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "metrics-leverage-ratio",
+          "method": "GET",
+          "path": "/api/v1/crypto/metrics/leverage-ratio",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "metrics-miner-to-exchange",
+          "method": "GET",
+          "path": "/api/v1/crypto/metrics/miner-to-exchange",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "metrics-mvrv",
+          "method": "GET",
+          "path": "/api/v1/crypto/metrics/mvrv",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "metrics-nupl",
+          "method": "GET",
+          "path": "/api/v1/crypto/metrics/nupl",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "metrics-puell-multiple",
+          "method": "GET",
+          "path": "/api/v1/crypto/metrics/puell-multiple",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "metrics-realized-price",
+          "method": "GET",
+          "path": "/api/v1/crypto/metrics/realized-price",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "metrics-sopr",
+          "method": "GET",
+          "path": "/api/v1/crypto/metrics/sopr",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "metrics-ssr",
+          "method": "GET",
+          "path": "/api/v1/crypto/metrics/ssr",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "metrics-whale-ratio",
+          "method": "GET",
+          "path": "/api/v1/crypto/metrics/whale-ratio",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "crypto-supply",
+          "method": "GET",
+          "path": "/api/v1/crypto/supply",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-crypto-metrics-and-screener",
+          "file": "unlock-events",
+          "method": "GET",
+          "path": "/api/v1/crypto/unlock-events",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-equity-estimates-and-targets",
+      "description": "Calls Arrays REST APIs for equity estimates and price targets — analyst price target news/consensus/summary, analyst consensus estimates (EPS, SALES, EBITDA, etc.), and company earnings guidance. Use when the user asks about analyst price targets, Wall Street earnings estimates, revenue forecasts, or company guidance. NOT for stock letter-grade quality ratings — use stock-technical-metrics for those.",
+      "endpoint_count": 4,
+      "pro_count": 4,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-equity-estimates-and-targets",
+          "file": "company-price-target-consensus",
+          "method": "GET",
+          "path": "/api/v1/stocks/company/price-target-consensus",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-equity-estimates-and-targets",
+          "file": "company-price-target-news",
+          "method": "GET",
+          "path": "/api/v1/stocks/company/price-target-news",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-equity-estimates-and-targets",
+          "file": "company-price-target-summary",
+          "method": "GET",
+          "path": "/api/v1/stocks/company/price-target-summary",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-equity-estimates-and-targets",
+          "file": "estimates-guidance",
+          "method": "GET",
+          "path": "/api/v1/stocks/estimates-guidance",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-equity-events",
+      "description": "Guides the agent to call Arrays REST APIs for equity events (dividends, splits, earnings calendar, earnings transcripts, SEC earnings releases, IPO, M&A, equity offering, crowdfunding). Use when the user needs upcoming or historical corporate event dates, earnings call transcripts, or SEC-filed earnings release documents. earnings-calendar only covers upcoming and recent earnings (no historical data). To look up historical earnings reports or financials, use arrays-data-api-equity-fundamentals instead.",
+      "endpoint_count": 10,
+      "pro_count": 1,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-equity-events",
+          "file": "crowdfunding-offerings",
+          "method": "GET",
+          "path": "/api/v1/stocks/crowdfunding/offerings",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-events",
+          "file": "dividends",
+          "method": "GET",
+          "path": "/api/v1/stocks/dividends",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-events",
+          "file": "earnings-calendar",
+          "method": "GET",
+          "path": "/api/v1/stocks/earnings-calendar",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-events",
+          "file": "equity-offering",
+          "method": "GET",
+          "path": "/api/v1/stocks/equity-offering",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-events",
+          "file": "ipo-calendar",
+          "method": "GET",
+          "path": "/api/v1/stocks/ipo-calendar",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-events",
+          "file": "ipo-confirmed-calendar",
+          "method": "GET",
+          "path": "/api/v1/stocks/ipo-confirmed-calendar",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-events",
+          "file": "mergers-acquisitions",
+          "method": "GET",
+          "path": "/api/v1/stocks/mergers-acquisitions",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-events",
+          "file": "sec-earnings-release",
+          "method": "GET",
+          "path": "/api/v1/stocks/sec-earnings-release",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-events",
+          "file": "splits",
+          "method": "GET",
+          "path": "/api/v1/stocks/splits",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-events",
+          "file": "earnings-transcript",
+          "method": "GET",
+          "path": "/api/v1/stocks/earnings-transcript",
+          "tier": "unstructured",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-equity-fundamentals",
+      "description": "Calls Arrays REST APIs for equity fundamentals — company profiles (US and non-US listings such as `0700.HK`, `9988.HK`, `000660.KS`), executive compensation (salary, bonus, stock awards), income/balance/cashflow statements, shares float, outstanding shares, fiscal dates, and KPI. Use when the user asks about company details (US or non-US), executive pay, quarterly/annual financial statements, or earnings filings. Do NOT use for financial metrics (revenue TTM, net income TTM, EPS TTM, ROE, ROA, ROIC, margins, debt ratios, current/quick ratio) or market-level technical indicators (moving averages, EMA, RSI, MACD, Bollinger, VWAP, beta, volatility, PE ratio, PB ratio, PS ratio, dividend yield, enterprise value, EV/EBITDA, price changes) — those MUST use arrays-data-api-stock-metrics.",
+      "endpoint_count": 11,
+      "pro_count": 1,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-equity-fundamentals",
+          "file": "company-balance-sheets",
+          "method": "GET",
+          "path": "/api/v1/stocks/company/balance-sheets",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-fundamentals",
+          "file": "company-cashflow-statements",
+          "method": "GET",
+          "path": "/api/v1/stocks/company/cashflow-statements",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-fundamentals",
+          "file": "company-detail",
+          "method": "GET",
+          "path": "/api/v1/stocks/company/detail",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-fundamentals",
+          "file": "company-income-statements",
+          "method": "GET",
+          "path": "/api/v1/stocks/company/income-statements",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-fundamentals",
+          "file": "company-kpi",
+          "method": "GET",
+          "path": "/api/v1/stocks/company/kpi",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-fundamentals",
+          "file": "fiscal-dates",
+          "method": "GET",
+          "path": "/api/v1/stocks/fiscal-dates",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-fundamentals",
+          "file": "fiscal-dates-range",
+          "method": "GET",
+          "path": "/api/v1/stocks/fiscal-dates/range",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-fundamentals",
+          "file": "outstanding-shares",
+          "method": "GET",
+          "path": "/api/v1/stocks/outstanding-shares",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-fundamentals",
+          "file": "shares-float",
+          "method": "GET",
+          "path": "/api/v1/stocks/shares-float",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-equity-fundamentals",
+          "file": "company-executives",
+          "method": "GET",
+          "path": "/api/v1/stocks/company/executives",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-equity-fundamentals",
+          "file": "company-detail-non-us",
+          "method": "GET",
+          "path": "/api/v1/stocks/non-us/company/detail",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-equity-ownership-and-flow",
+      "description": "Guides the agent to call Arrays REST APIs for equity ownership and flow (institutional holdings, insider transactions, congress trades). Use when the user needs data about who owns a stock or recent insider/congress trading activity.",
+      "endpoint_count": 3,
+      "pro_count": 3,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-equity-ownership-and-flow",
+          "file": "congress-recent-trades",
+          "method": "GET",
+          "path": "/api/v1/stocks/congress/recent-trades",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-equity-ownership-and-flow",
+          "file": "insider-transactions",
+          "method": "GET",
+          "path": "/api/v1/stocks/insider/transactions",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-equity-ownership-and-flow",
+          "file": "institution-holder",
+          "method": "GET",
+          "path": "/api/v1/stocks/institution-holder",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-etf-fundamentals",
+      "description": "Guides the agent to call Arrays REST APIs for ETF fundamentals (holdings, info, country/sector weightings, fund flow). Use when the user needs ETF composition, performance, or flow data.",
+      "endpoint_count": 5,
+      "pro_count": 1,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-etf-fundamentals",
+          "file": "country-weightings",
+          "method": "GET",
+          "path": "/api/v1/etf/country-weightings",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-etf-fundamentals",
+          "file": "holdings",
+          "method": "GET",
+          "path": "/api/v1/etf/holdings",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-etf-fundamentals",
+          "file": "info",
+          "method": "GET",
+          "path": "/api/v1/etf/info",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-etf-fundamentals",
+          "file": "sector-weightings",
+          "method": "GET",
+          "path": "/api/v1/etf/sector-weightings",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-etf-fundamentals",
+          "file": "flow",
+          "method": "GET",
+          "path": "/api/v1/etf/flow",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-macro-and-economics",
+      "description": "Guides the agent to call Arrays REST APIs for macro and economics data (treasury rates, economic indicators, CPI, GDP, unemployment, inflation, consumer sentiment, macro index/forex/commodity, VIX). Use when the user asks about macroeconomic indicators, CPI release dates, economic data announcements, interest rates, forex, commodity prices (gold GCUSD, silver SILUSD, oil CLUSD), market index data (S&P 500 ^SPX, Dow Jones ^DJI, Nasdaq ^IXIC), or VIX volatility indexes.",
+      "endpoint_count": 10,
+      "pro_count": 0,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-macro-and-economics",
+          "file": "macro-commodity-historical",
+          "method": "GET",
+          "path": "/api/v1/macro/commodity/historical",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-macro-and-economics",
+          "file": "macro-commodity-real-time",
+          "method": "GET",
+          "path": "/api/v1/macro/commodity/real-time",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-macro-and-economics",
+          "file": "macro-commodity-symbol-list",
+          "method": "GET",
+          "path": "/api/v1/macro/commodity/symbols",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-macro-and-economics",
+          "file": "economic-indicators",
+          "method": "GET",
+          "path": "/api/v1/macro/economic-indicators",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-macro-and-economics",
+          "file": "macro-forex-historical",
+          "method": "GET",
+          "path": "/api/v1/macro/forex/historical",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-macro-and-economics",
+          "file": "macro-forex-real-time",
+          "method": "GET",
+          "path": "/api/v1/macro/forex/real-time",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-macro-and-economics",
+          "file": "macro-forex-symbol-list",
+          "method": "GET",
+          "path": "/api/v1/macro/forex/symbols",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-macro-and-economics",
+          "file": "macro-index-historical",
+          "method": "GET",
+          "path": "/api/v1/macro/index/historical",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-macro-and-economics",
+          "file": "macro-index-real-time",
+          "method": "GET",
+          "path": "/api/v1/macro/index/real-time",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-macro-and-economics",
+          "file": "rates",
+          "method": "GET",
+          "path": "/api/v1/macro/treasury-rates",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-news",
+      "description": "Guides the agent to call Arrays REST APIs for market news. Use when the user needs market news articles.",
+      "endpoint_count": 1,
+      "pro_count": 1,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-news",
+          "file": "market-news",
+          "method": "GET",
+          "path": "/api/v1/stocks/market-news",
+          "tier": "unstructured",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-options",
+      "description": "Guides the agent to call Arrays REST APIs for stock options data — option contract specifications (strike, expiry, exercise style, active status), options OHLCV/VWAP kline data, historical option Greeks (delta, gamma, theta, vega) with implied volatility, and full option-chain snapshots (every contract on an underlying with OHLCV, Greeks, IV, open interest). Use when the user asks about options pricing, strike prices, expiration dates, options volume, options VWAP, options candlestick data, option Greeks, delta/gamma/theta/vega, implied volatility, open interest, or an option chain for a ticker.",
+      "endpoint_count": 2,
+      "pro_count": 2,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-options",
+          "file": "contracts",
+          "method": "GET",
+          "path": "/api/v1/options/contracts",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-options",
+          "file": "kline",
+          "method": "GET",
+          "path": "/api/v1/options/kline",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-polymarket",
+      "description": "Calls Polymarket public APIs for prediction market data — discover and search markets/events, real-time and historical pricing (order books, spreads, mid-market prices), user positions and P&L, trade history, on-chain activity, top holders, open interest. Use when the user asks about prediction markets, betting odds, Polymarket prices, order books, price history, market depth, positions, trade history, or market holders.",
+      "endpoint_count": 18,
+      "pro_count": 18,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "activity",
+          "method": "GET",
+          "path": "polymarket:/activity",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "book",
+          "method": "GET",
+          "path": "polymarket:/book",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "closed-positions",
+          "method": "GET",
+          "path": "polymarket:/closed-positions",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "events",
+          "method": "GET",
+          "path": "polymarket:/events",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "holders",
+          "method": "GET",
+          "path": "polymarket:/holders",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "markets",
+          "method": "GET",
+          "path": "polymarket:/markets",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "midpoint",
+          "method": "GET",
+          "path": "polymarket:/midpoint",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "oi",
+          "method": "GET",
+          "path": "polymarket:/oi",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "positions",
+          "method": "GET",
+          "path": "polymarket:/positions",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "price",
+          "method": "GET",
+          "path": "polymarket:/price",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "prices-history",
+          "method": "GET",
+          "path": "polymarket:/prices-history",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "public-search",
+          "method": "GET",
+          "path": "polymarket:/public-search",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "series",
+          "method": "GET",
+          "path": "polymarket:/series",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "sports",
+          "method": "GET",
+          "path": "polymarket:/sports",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "spread",
+          "method": "GET",
+          "path": "polymarket:/spread",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "tags",
+          "method": "GET",
+          "path": "polymarket:/tags",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "trades",
+          "method": "GET",
+          "path": "polymarket:/trades",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-polymarket",
+          "file": "value",
+          "method": "GET",
+          "path": "polymarket:/value",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-semiconductor-price",
+      "description": "Guides the agent to call Arrays REST APIs for semiconductor price data (DRAM spot & contract price, NAND Flash spot & contract price, Memory Card price, DXI index). Use when the user asks about DRAM prices, DDR3/DDR4/DDR5 memory pricing, NAND Flash prices (MLC/SLC), MicroSD card prices, contract/long-term memory pricing, the TrendForce DRAMeXchange (DXI) index, or semiconductor component pricing trends.",
+      "endpoint_count": 0,
+      "pro_count": 0,
+      "endpoints": []
+    },
+    {
+      "name": "arrays-data-api-social-feeds",
+      "description": "Calls Arrays REST APIs for social feeds — posts from X/Twitter handles (history + recent), post lookup by URL, full-text search across the indexed corpus, handle entity metadata, and the currently-tracked accounts list. Use when the user asks for tweets from a specific account, recent posts from a handle, posts referenced by a URL, posts matching a query or phrase, metadata about an X/Twitter handle, or a list of accounts already in the tracking registry.",
+      "endpoint_count": 5,
+      "pro_count": 5,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-social-feeds",
+          "file": "x-by-handle",
+          "method": "GET",
+          "path": "/api/v1/social-feeds/x/by-handle",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-social-feeds",
+          "file": "x-by-url",
+          "method": "GET",
+          "path": "/api/v1/social-feeds/x/by-url",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-social-feeds",
+          "file": "x-entities-handle",
+          "method": "GET",
+          "path": "/api/v1/social-feeds/x/entities/handle/{twitter_handle}",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-social-feeds",
+          "file": "x-entities-handles",
+          "method": "GET",
+          "path": "/api/v1/social-feeds/x/entities/handles",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        },
+        {
+          "skill": "arrays-data-api-social-feeds",
+          "file": "x-search",
+          "method": "GET",
+          "path": "/api/v1/social-feeds/x/search",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-spot-market-price-and-volume",
+      "description": "Calls Arrays REST APIs for spot market prices and volume — US and non-US stock kline plus crypto spot price/volume/candlestick/kline/OHLCV data on Binance (spot USDT) and Hyperliquid (spot USDC). Use when the user asks for raw spot price/volume/OHLCV/candlestick/kline data, Binance or Hyperliquid spot prices, HYPE candles, or non-US stock daily bars for dotted-suffix tickers like `0700.HK`, `9988.HK`, or `000660.KS`. For perpetual futures kline / volume / funding rate / open interest / long-short ratio / taker buy-sell volume / HIP-3 tokenized equities (AAPL, TSLA on Hyperliquid), use arrays-data-api-crypto-futures-data. For token metadata profile (name, category, description, logo, contracts, official URLs) and metrics including market cap, crypto supply, moving averages, EMA, SMA, RSI, MACD, Bollinger Bands, VWAP, beta, volatility, PE ratio, PB ratio, PS ratio, dividend yield, enterprise value, EV/EBITDA, price change percentages (1d/1w/1M/3M/6M/YTD/1Y), use arrays-data-api-stock-metrics for stocks and arrays-data-api-crypto-metrics-and-screener for crypto.",
+      "endpoint_count": 5,
+      "pro_count": 0,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-spot-market-price-and-volume",
+          "file": "binance-spot-usdt-kline",
+          "method": "GET",
+          "path": "/api/v1/crypto/binance/spot/usdt/kline",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-spot-market-price-and-volume",
+          "file": "crypto-detail",
+          "method": "GET",
+          "path": "/api/v1/crypto/detail",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-spot-market-price-and-volume",
+          "file": "hyperliquid-spot-usdc-kline",
+          "method": "GET",
+          "path": "/api/v1/crypto/hyperliquid/spot/usdc/kline",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-spot-market-price-and-volume",
+          "file": "stocks-kline",
+          "method": "GET",
+          "path": "/api/v1/stocks/kline",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-spot-market-price-and-volume",
+          "file": "stocks-non-us-kline",
+          "method": "GET",
+          "path": "/api/v1/stocks/non-us/kline",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-stock-metrics",
+      "description": "Guides the agent to call Arrays REST APIs for stock metrics — financial metrics (revenue TTM, net income TTM, EPS TTM, ROE, ROA, ROIC, margins, debt ratios, current/quick ratio), market/technical metrics (market cap, moving averages, EMA, SMA, RSI, MACD, Bollinger, VWAP, beta, volatility, PE ratio (incl. trailing P/E and forward P/E), PB ratio, PS ratio, dividend yield, enterprise value, EV/EBITDA, price changes), darkpool OHLC, and PIT ratings. Use when the user asks about stock market cap, financial ratios, computed market indicators (including trailing or forward P/E), darkpool data, or point-in-time stock quality ratings (letter-grade scores like A+, B, C based on DCF, ROE, P/E, etc.).",
+      "endpoint_count": 4,
+      "pro_count": 1,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-stock-metrics",
+          "file": "financial-metrics",
+          "method": "GET",
+          "path": "/api/v1/stocks/financial-metrics",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-stock-metrics",
+          "file": "market-metrics",
+          "method": "GET",
+          "path": "/api/v1/stocks/market-metrics",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-stock-metrics",
+          "file": "ratings",
+          "method": "GET",
+          "path": "/api/v1/stocks/ratings",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-stock-metrics",
+          "file": "darkpool",
+          "method": "GET",
+          "path": "/api/v1/stocks/darkpool",
+          "tier": "alternative",
+          "required_subscription_tier": "pro",
+          "access": "pro_only",
+          "pro_required": true
+        }
+      ]
+    },
+    {
+      "name": "arrays-data-api-stock-screener",
+      "description": "Calls Arrays REST APIs for stock screening and filtering — basic-info screener by country/exchange/industry/sector, event screener (IPO/splits/earnings), and financial/technical metrics screener. Use when the user wants to find, filter, or screen stocks by any criteria.",
+      "endpoint_count": 6,
+      "pro_count": 0,
+      "endpoints": [
+        {
+          "skill": "arrays-data-api-stock-screener",
+          "file": "basic-info-screener",
+          "method": "GET",
+          "path": "/api/v1/stocks/screener/basic-info/{sub}",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-stock-screener",
+          "file": "event-screener",
+          "method": "GET",
+          "path": "/api/v1/stocks/screener/events",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-stock-screener",
+          "file": "screener-financial-metrics",
+          "method": "GET",
+          "path": "/api/v1/stocks/screener/financial-metrics",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-stock-screener",
+          "file": "screener-financial-metrics-timerange",
+          "method": "GET",
+          "path": "/api/v1/stocks/screener/financial-metrics/timerange",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-stock-screener",
+          "file": "screener-technical-metrics",
+          "method": "GET",
+          "path": "/api/v1/stocks/screener/technical-metrics",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        },
+        {
+          "skill": "arrays-data-api-stock-screener",
+          "file": "screener-technical-metrics-timerange",
+          "method": "GET",
+          "path": "/api/v1/stocks/screener/technical-metrics/timerange",
+          "tier": "public",
+          "required_subscription_tier": "free",
+          "access": "free_and_pro",
+          "pro_required": false
+        }
+      ]
+    }
+  ]
+}

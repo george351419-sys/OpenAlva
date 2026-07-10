@@ -45,6 +45,9 @@ describe('initOpenAlvaRoot', () => {
 
     const secretsStat = await fs.stat(path.join(tmpRoot, 'secrets.json'));
     expect(secretsStat.mode & 0o777).toBe(0o600);
+    // 播种 ARRAYS_JWT 占位（让守卫 secret 的 feed 开箱即用；真鉴权走云端路由）
+    const secrets = JSON.parse(await fs.readFile(path.join(tmpRoot, 'secrets.json'), 'utf8'));
+    expect(secrets.ARRAYS_JWT).toBe('routed-via-alva');
 
     // 第二次运行：不报错、不覆盖已有文件
     await fs.writeFile(path.join(tmpRoot, 'secrets.json'), '{"KEEP":"me"}\n', { mode: 0o600 });

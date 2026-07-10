@@ -1,0 +1,18 @@
+{
+  "name": "@openalva/data",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "mirror": "tsx src/mirror.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.3"
+  },
+  "dependencies": {
+    "@openalva/feed-runtime": "workspace:*"
+  }
+}
