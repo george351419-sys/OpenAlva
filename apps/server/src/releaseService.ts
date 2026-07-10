@@ -117,6 +117,46 @@ export class ReleaseService {
     return { playbook, release, snapshotDir };
   }
 
+  /** Explore 门户数据源：所有已发布（有 latest_release）的 playbook。 */
+  async listReleased(): Promise<
+    {
+      name: string;
+      display_name: string;
+      description: string;
+      latest_release: string;
+      live_url: string;
+      updated_at: number;
+    }[]
+  > {
+    const playbooksDir = path.join(homeDir(this.user, this.root), 'playbooks');
+    let entries: string[];
+    try {
+      entries = await fs.readdir(playbooksDir);
+    } catch {
+      return [];
+    }
+    const out: Awaited<ReturnType<ReleaseService['listReleased']>> = [];
+    for (const entry of entries) {
+      try {
+        const playbook = JSON.parse(
+          await fs.readFile(path.join(playbooksDir, entry, 'playbook.json'), 'utf8'),
+        ) as PlaybookJson;
+        if (!playbook.latest_release) continue;
+        out.push({
+          name: playbook.name,
+          display_name: playbook.display_name,
+          description: playbook.description,
+          latest_release: playbook.latest_release,
+          live_url: `/u/${this.user}/playbooks/${playbook.name}`,
+          updated_at: playbook.draft.updated_at,
+        });
+      } catch {
+        // 非 playbook 目录或损坏的 json，跳过
+      }
+    }
+    return out.sort((a, b) => b.updated_at - a.updated_at);
+  }
+
   async latestSnapshot(name: string): Promise<string | null> {
     const clean = cleanName(name);
     const jsonFile = path.join(this.playbookDir(clean), 'playbook.json');

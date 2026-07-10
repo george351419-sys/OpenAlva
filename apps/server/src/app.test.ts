@@ -169,6 +169,133 @@ describe('server app', () => {
     await app.close();
   });
 
+  it('lists available models based on configured keys', async () => {
+    const both = await buildApp({
+      root: tmpDir,
+      user: 'george',
+      anthropicApiKey: 'a-key',
+      deepseekApiKey: 'd-key',
+    });
+    const res = await both.inject({ method: 'GET', url: '/api/models' });
+    expect(res.json()).toEqual({
+      models: [
+        { id: 'claude-fable-5', provider: 'anthropic', default: true },
+        { id: 'deepseek-chat', provider: 'deepseek', default: false },
+      ],
+    });
+    await both.close();
+
+    const none = await buildApp({ root: tmpDir, user: 'george' });
+    const fallback = await none.inject({ method: 'GET', url: '/api/models' });
+    expect(fallback.json()).toEqual({
+      models: [{ id: 'local-fallback', provider: 'local', default: true }],
+    });
+    await none.close();
+  });
+
+  it('runs a streaming DeepSeek tool-use loop when selected via the model field', async () => {
+    const source = new StubDataSource([{ time_close: 2, price_close: 110 }]);
+    const urls: string[] = [];
+    const bodies: { model?: string; stream?: boolean }[] = [];
+    const fakeFetch: typeof fetch = async (url, init) => {
+      urls.push(String(url));
+      bodies.push(JSON.parse(String(init?.body)) as { model?: string; stream?: boolean });
+      if (bodies.length === 1) {
+        return deepseekSseResponse(
+          [
+            { content: '我先取数据。' },
+            {
+              toolCall: {
+                id: 'call_1',
+                name: 'data__call',
+                args: {
+                  skill: 'arrays-data-api-spot-market-price-and-volume',
+                  endpoint: 'binance-spot-usdt-kline',
+                  params: { symbol: 'BTC', interval: '1d', limit: 3 },
+                },
+              },
+            },
+          ],
+          'tool_calls',
+        );
+      }
+      return deepseekSseResponse([{ content: 'BTC 最新价约 110。' }], 'stop');
+    };
+    const app = await buildApp({
+      root: tmpDir,
+      user: 'george',
+      dataSource: source,
+      anthropicApiKey: 'a-key',
+      deepseekApiKey: 'd-key',
+      fetchImpl: fakeFetch,
+    });
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/chat/sessions',
+      payload: { title: 'DeepSeek' },
+    });
+    const sessionId = created.json<{ session: { id: string } }>().session.id;
+    const stream = await app.inject({
+      method: 'POST',
+      url: `/api/chat/sessions/${sessionId}/stream`,
+      payload: { message: 'BTC 最新情况？', model: 'deepseek-chat' },
+    });
+
+    expect(stream.statusCode).toBe(200);
+    expect(urls[0]).toContain('api.deepseek.com/chat/completions');
+    expect(bodies[0]!.model).toBe('deepseek-chat');
+    expect(bodies[0]!.stream).toBe(true);
+    expect(stream.body).toContain('event: text_delta');
+    expect(stream.body).toContain('"name":"data.call"');
+    expect(stream.body).toContain('BTC 最新价约 110。');
+    expect(bodies).toHaveLength(2);
+    expect(source.calls).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('serves skill docs and publishes inline artifacts', async () => {
+    const app = await buildApp({ root: tmpDir, user: 'george' });
+
+    const list = await app.inject({ method: 'POST', url: '/api/tools/skilldocs.list', payload: {} });
+    const skills = list.json<{ data: { skills: { skill: string }[] } }>().data.skills;
+    expect(skills.map((s) => s.skill)).toEqual(
+      expect.arrayContaining(['alva', 'portfolio-watch']),
+    );
+
+    const read = await app.inject({
+      method: 'POST',
+      url: '/api/tools/skilldocs.read',
+      payload: { skill: 'alva' },
+    });
+    const doc = read.json<{ data: { content: string; size: number; truncated: boolean } }>().data;
+    expect(doc.content).toContain('Alva');
+    expect(doc.size).toBeGreaterThan(0);
+
+    const escape = await app.inject({
+      method: 'POST',
+      url: '/api/tools/skilldocs.read',
+      payload: { skill: 'alva', file: '../../../etc/hosts' },
+    });
+    expect(escape.json()).toMatchObject({ success: false });
+
+    const published = await app.inject({
+      method: 'POST',
+      url: '/api/tools/artifact.publish',
+      payload: { title: 'BTC chart', html: '<html><body>chart!</body></html>' },
+    });
+    const artifact = published.json<{ data: { url: string; title: string } }>().data;
+    expect(artifact.title).toBe('BTC chart');
+    const page = await app.inject({ method: 'GET', url: artifact.url });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain('chart!');
+    // 模型生成的 HTML 必须降权：opaque origin，脚本打不到 /api/tools/*
+    expect(page.headers['content-security-policy']).toBe('sandbox allow-scripts');
+
+    await app.close();
+  });
+
   it('reports Claude API failures over SSE instead of hanging the stream', async () => {
     const fakeFetch: typeof fetch = async () =>
       new Response(
@@ -269,6 +396,19 @@ describe('server app', () => {
     expect(sdk.statusCode).toBe(200);
     expect(sdk.body).toContain('window.OpenAlva');
 
+    const explore = await app.inject({ method: 'GET', url: '/api/explore' });
+    expect(explore.statusCode).toBe(200);
+    expect(explore.json()).toMatchObject({
+      playbooks: [
+        {
+          name: 'btc-watch',
+          display_name: 'BTC Watch',
+          latest_release: 'v1',
+          live_url: '/u/george/playbooks/btc-watch',
+        },
+      ],
+    });
+
     await app.close();
   });
 });
@@ -312,6 +452,51 @@ class StubDataSource implements DataSource {
 type FakeBlock =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> };
+
+type DeepseekFakePart =
+  | { content: string; toolCall?: never }
+  | { toolCall: { id: string; name: string; args: Record<string, unknown> }; content?: never };
+
+/** 构造 DeepSeek（OpenAI 兼容）chat/completions 流式假响应。 */
+function deepseekSseResponse(parts: DeepseekFakePart[], finishReason: string): Response {
+  const chunks: unknown[] = [];
+  for (const part of parts) {
+    if (part.content !== undefined) {
+      chunks.push({ choices: [{ delta: { content: part.content } }] });
+    } else {
+      // 模拟 OpenAI 协议：首块带 id/name，参数按增量分片
+      const args = JSON.stringify(part.toolCall.args);
+      chunks.push({
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: part.toolCall.id,
+                  function: { name: part.toolCall.name, arguments: '' },
+                },
+              ],
+            },
+          },
+        ],
+      });
+      const mid = Math.floor(args.length / 2);
+      for (const slice of [args.slice(0, mid), args.slice(mid)]) {
+        chunks.push({
+          choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: slice } }] } }],
+        });
+      }
+    }
+  }
+  chunks.push({ choices: [{ delta: {}, finish_reason: finishReason }] });
+  const body =
+    chunks.map((c) => `data: ${JSON.stringify(c)}\n\n`).join('') + 'data: [DONE]\n\n';
+  return new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream; charset=utf-8' },
+  });
+}
 
 /** 构造 Anthropic Messages API 流式（SSE）假响应，形状同真实 stream:true 返回。 */
 function sseMessageResponse(blocks: FakeBlock[], stopReason: string): Response {

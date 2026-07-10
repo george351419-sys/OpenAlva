@@ -1,8 +1,11 @@
+import fsp from 'node:fs/promises';
+import path from 'node:path';
 import { Alfs } from '@openalva/alfs';
 import { ArraysViaAlvaSource, DataError, loadCatalog, type DataSource } from '@openalva/data';
-import { runFeed } from '@openalva/feed-runtime';
+import { runFeed, type HttpFetchImpl } from '@openalva/feed-runtime';
 import type { CronService, SchedulerStore } from '@openalva/scheduler';
 import { ReleaseService } from './releaseService.js';
+import { SkillDocs } from './skillDocs.js';
 
 export interface ToolEnvelope<T = unknown> {
   success: boolean;
@@ -29,17 +32,23 @@ export interface AgentToolsOptions {
    */
   schedulerStore: SchedulerStore;
   cronService: CronService;
+  /** feed 的 net/http 实现（Arrays 路由）；run 工具透传给 runFeed */
+  feedHttpFetch?: HttpFetchImpl;
+  /** 仓库根：skilldocs 从 skills/ 与逆向材料目录加载 SKILL.md */
+  repoRoot?: string;
 }
 
 export class AgentTools {
   private readonly alfs: Alfs;
   private readonly dataSource: DataSource;
   private readonly releases: ReleaseService;
+  private readonly skillDocs: SkillDocs;
 
   constructor(private readonly opts: AgentToolsOptions) {
     this.alfs = new Alfs(opts.root, opts.user);
     this.dataSource = opts.dataSource ?? new ArraysViaAlvaSource();
     this.releases = new ReleaseService(opts.root, opts.user);
+    this.skillDocs = new SkillDocs(opts.repoRoot);
   }
 
   specs(): ToolSpec[] {
@@ -149,6 +158,36 @@ export class AgentTools {
           changelog: { type: 'string' },
         },
       }),
+      spec(
+        'skilldocs.list',
+        'List available skill documents (the alva platform skill and Portfolio-Watch-Skill). Call this before building feeds, playbooks, or strategies.',
+        { type: 'object', properties: {} },
+      ),
+      spec(
+        'skilldocs.read',
+        'Read a skill document window (16k chars). Use offset to page through long files. file defaults to SKILL.md; reference files look like references/feed-sdk.md.',
+        {
+          type: 'object',
+          required: ['skill'],
+          properties: {
+            skill: { type: 'string' },
+            file: { type: 'string' },
+            offset: { type: 'number' },
+          },
+        },
+      ),
+      spec(
+        'artifact.publish',
+        'Publish a one-off HTML artifact (e.g. a chart answer) and get a local URL that renders inline as an iframe card. Link /design-system/v1/design-system.css for styling.',
+        {
+          type: 'object',
+          required: ['title', 'html'],
+          properties: {
+            title: { type: 'string' },
+            html: { type: 'string' },
+          },
+        },
+      ),
     ];
   }
 
@@ -199,6 +238,7 @@ export class AgentTools {
           ...(typeof input['code'] === 'string' ? { code: input['code'] } : {}),
           ...(input['args'] !== undefined ? { args: input['args'] } : {}),
           ...(typeof input['timeoutMs'] === 'number' ? { timeoutMs: input['timeoutMs'] } : {}),
+          ...(this.opts.feedHttpFetch ? { httpFetch: this.opts.feedHttpFetch } : {}),
         });
       case 'data.call':
         return this.dataSource.call({
@@ -239,9 +279,31 @@ export class AgentTools {
           ...(typeof input['version'] === 'string' ? { version: input['version'] } : {}),
           ...(typeof input['changelog'] === 'string' ? { changelog: input['changelog'] } : {}),
         });
+      case 'skilldocs.list':
+        return { skills: this.skillDocs.list() };
+      case 'skilldocs.read':
+        return this.skillDocs.read(
+          reqString(input, 'skill'),
+          typeof input['file'] === 'string' ? input['file'] : undefined,
+          optNumber(input, 'offset') ?? 0,
+        );
+      case 'artifact.publish':
+        return this.publishArtifact(reqString(input, 'title'), reqString(input, 'html'));
       default:
         return this.executeDeploy(name, input);
     }
+  }
+
+  /** 一次性 HTML artifact：存到 <root>/artifacts/<uuid>.html，经 /artifacts/:id 提供 */
+  private async publishArtifact(
+    title: string,
+    html: string,
+  ): Promise<{ id: string; title: string; url: string }> {
+    const id = crypto.randomUUID();
+    const dir = path.join(this.opts.root, 'artifacts');
+    await fsp.mkdir(dir, { recursive: true });
+    await fsp.writeFile(path.join(dir, `${id}.html`), html, 'utf8');
+    return { id, title, url: `/artifacts/${id}` };
   }
 
   private async executeDeploy(name: string, input: Record<string, unknown>): Promise<unknown> {

@@ -4,7 +4,8 @@ import path from 'node:path';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { openAlvaPaths, resolveOpenAlvaRoot } from '@openalva/alfs';
-import type { DataSource } from '@openalva/data';
+import { createArraysRoutingFetch, type DataSource } from '@openalva/data';
+import { defaultHttpFetch, type HttpFetchImpl } from '@openalva/feed-runtime';
 import { CronService, SchedulerStore } from '@openalva/scheduler';
 import { AgentRunner } from './agentRunner.js';
 import { AgentTools } from './agentTools.js';
@@ -19,7 +20,11 @@ export interface BuildAppOptions {
   dataSource?: DataSource;
   anthropicApiKey?: string;
   anthropicModel?: string;
+  deepseekApiKey?: string;
+  deepseekModel?: string;
   fetchImpl?: typeof fetch;
+  /** feed 的 net/http 实现；缺省为 Arrays 路由 fetch（非 Arrays 请求走本地 fetch） */
+  feedHttpFetch?: HttpFetchImpl;
 }
 
 export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
@@ -28,10 +33,14 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   const user = opts.user ?? 'george351419';
   const app = Fastify({ logger: false });
   const chatStore = new ChatStore(openAlvaPaths(root).dbFile);
+  // feed 的 http 面默认走 Arrays 路由：命中 Arrays 主机的请求经 alva 云沙箱
+  // 执行（JWT 在那边），其余请求本地直连——cron 定时、agent run 工具一致。
+  const feedHttpFetch =
+    opts.feedHttpFetch ?? createArraysRoutingFetch({ fallback: defaultHttpFetch });
   // 调度器归 buildApp 所有：deploy.trigger 与 cron 执行共享同一 CronService，
   // 同任务并发保护（running set）才真正生效。
   const schedulerStore = new SchedulerStore(openAlvaPaths(root).dbFile);
-  const cronService = new CronService(schedulerStore, root);
+  const cronService = new CronService(schedulerStore, root, { httpFetch: feedHttpFetch });
   cronService.start();
   const tools = new AgentTools({
     root,
@@ -39,12 +48,16 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     dataSource: opts.dataSource,
     schedulerStore,
     cronService,
+    feedHttpFetch,
+    repoRoot,
   });
   const releases = new ReleaseService(root, user);
   const agent = new AgentRunner({
     tools,
-    apiKey: opts.anthropicApiKey ?? process.env['ANTHROPIC_API_KEY'],
-    model: opts.anthropicModel ?? process.env['OPENALVA_CLAUDE_MODEL'],
+    anthropicApiKey: opts.anthropicApiKey ?? process.env['ANTHROPIC_API_KEY'],
+    anthropicModel: opts.anthropicModel ?? process.env['OPENALVA_CLAUDE_MODEL'],
+    deepseekApiKey: opts.deepseekApiKey ?? process.env['DEEPSEEK_API_KEY'],
+    deepseekModel: opts.deepseekModel ?? process.env['OPENALVA_DEEPSEEK_MODEL'],
     fetchImpl: opts.fetchImpl,
   });
 
@@ -68,6 +81,24 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     reply.type('application/javascript').send(browserSdk()),
   );
   app.get('/api/tools', async () => ({ tools: tools.specs() }));
+  app.get('/api/models', async () => ({ models: agent.models() }));
+  app.get('/api/explore', async () => ({ playbooks: await releases.listReleased() }));
+
+  app.get('/artifacts/:id', async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    if (!/^[0-9a-f-]{36}$/.test(id)) return reply.code(404).send({ error: 'not found' });
+    try {
+      const html = await fsp.readFile(path.join(root, 'artifacts', `${id}.html`), 'utf8');
+      // 模型生成的 HTML 一律降权：即便被直接导航打开也处于 opaque origin，
+      // 脚本无法打到无鉴权的 /api/tools/*
+      return reply
+        .type('text/html')
+        .header('content-security-policy', 'sandbox allow-scripts')
+        .send(html);
+    } catch {
+      return reply.code(404).send({ error: 'not found' });
+    }
+  });
 
   app.post('/api/tools/:name', async (req) => {
     const name = (req.params as { name: string }).name;
@@ -94,6 +125,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     if (!session) return reply.code(404).send({ error: 'not found' });
     const body = objectBody(req.body);
     const message = str(body['message'])?.trim();
+    const model = str(body['model']);
     if (!message) return reply.code(400).send({ error: 'message is required' });
 
     chatStore.addMessage({ sessionId: id, role: 'user', content: message });
@@ -118,6 +150,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       const response = await agent.run({
         messages: chatStore.messages(id),
         latestMessage: message,
+        ...(model ? { model } : {}),
         emit: (event, data) => {
           if (event === 'tool_result') {
             // 工具执行历史落库：刷新后 UI 可恢复工具卡，后续轮次模型可见
