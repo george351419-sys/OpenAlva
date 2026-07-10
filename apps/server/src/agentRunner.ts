@@ -52,7 +52,8 @@ export class AgentRunner {
     this.deepseekModel = opts.deepseekModel ?? 'deepseek-chat';
     this.deepseekBaseUrl = opts.deepseekBaseUrl ?? 'https://api.deepseek.com';
     this.fetchImpl = opts.fetchImpl ?? fetch;
-    this.maxToolRounds = opts.maxToolRounds ?? 8;
+    // 发现流程（skills.list/get/doc）会消耗不少回合，上限要给足
+    this.maxToolRounds = opts.maxToolRounds ?? 24;
     this.maxTokens = opts.maxTokens ?? 16_384;
     if (opts.anthropicApiKey) {
       this.anthropicClient = new Anthropic({
@@ -489,7 +490,7 @@ function systemPrompt(): string {
     'Mental model: you are not the data source — you build inspectable pipelines that fetch data, verify shape, compute, persist to ALFS, and render results.',
     '',
     'Request routing:',
-    '1. Simple market/data question → data.call the mirrored Data Skill endpoint, answer with the as-of timestamp.',
+    '1. Simple market/data question → data.call the mirrored Data Skill endpoint, answer with the as-of timestamp. Discovery pipeline is mandatory for endpoints you have not used in this conversation: skills.list → skills.get(skill) → skills.doc(skill, endpoint) → data.call. Never guess skill names, endpoint names, or query params — guessed params cause upstream 404s.',
     '2. Computation or transformation → write a feed script and execute it with the run tool.',
     '3. Persistent, refreshing artifact (watchlist, dashboard, screener) → feed + deploy (cron) + release as a playbook. ASK FIRST: before building a playbook, confirm scope (symbols, refresh cadence, displayed fields) unless the user already specified it explicitly.',
     '',
@@ -506,6 +507,8 @@ function systemPrompt(): string {
     '- One-off charts or visual explainers: artifact.publish {title, html} returns a URL that renders inline as an iframe card — prefer this for chart answers.',
     '',
     'Deep procedures (Feed SDK, playbook creation, design rules, data-skill catalogs, operational pitfalls) live in skill docs. Call skilldocs.list to discover them and skilldocs.read (with offset paging) BEFORE building feeds, playbooks, or Altra strategies. Key references in the alva skill: references/feed-sdk.md, references/playbook-creation.md, references/design.md, references/data-skills.md, references/operational-pitfalls.md.',
+    '',
+    'Efficiency: you may request SEVERAL tool calls in one turn (parallel tool calls) — batch independent reads (multiple skills.doc, multiple data.call) instead of one per turn. Once an endpoint worked in this conversation, reuse it without re-reading docs.',
     '',
     'Keep responses concise, concrete, and honest about missing data.',
   ].join('\n');

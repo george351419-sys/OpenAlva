@@ -1,7 +1,14 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { Alfs } from '@openalva/alfs';
-import { ArraysViaAlvaSource, DataError, loadCatalog, type DataSource } from '@openalva/data';
+import {
+  ArraysViaAlvaSource,
+  CATALOG_DIR,
+  DataError,
+  findEndpoint,
+  loadCatalog,
+  type DataSource,
+} from '@openalva/data';
 import { runFeed, type HttpFetchImpl } from '@openalva/feed-runtime';
 import type { CronService, SchedulerStore } from '@openalva/scheduler';
 import { ReleaseService } from './releaseService.js';
@@ -121,24 +128,41 @@ export class AgentTools {
         required: ['id'],
         properties: { id: { type: 'number' }, limit: { type: 'number' } },
       }),
-      spec('data.call', 'Call a mirrored Data Skill endpoint through the configured driver.', {
-        type: 'object',
-        required: ['skill', 'endpoint', 'params'],
-        properties: {
-          skill: { type: 'string' },
-          endpoint: { type: 'string' },
-          params: { type: 'object' },
+      spec(
+        'data.call',
+        'Call a mirrored Data Skill endpoint. skill and endpoint must be EXACT names from skills.list / skills.get — never guess them. Read skills.doc for the endpoint first: it defines the required query params (wrong or extra params cause upstream 404s).',
+        {
+          type: 'object',
+          required: ['skill', 'endpoint', 'params'],
+          properties: {
+            skill: { type: 'string' },
+            endpoint: { type: 'string' },
+            params: { type: 'object' },
+          },
         },
-      }),
+      ),
       spec('skills.list', 'List mirrored Data Skills and endpoint counts.', {
         type: 'object',
         properties: {},
       }),
-      spec('skills.get', 'Get one mirrored Data Skill summary.', {
-        type: 'object',
-        required: ['skill'],
-        properties: { skill: { type: 'string' } },
-      }),
+      spec(
+        'skills.get',
+        'Get one mirrored Data Skill summary, including its exact endpoint names.',
+        {
+          type: 'object',
+          required: ['skill'],
+          properties: { skill: { type: 'string' } },
+        },
+      ),
+      spec(
+        'skills.doc',
+        'Read the mirrored parameter/response documentation for one Data Skill endpoint. ALWAYS read this before the first data.call to an endpoint — it defines required params, accepted values, and response fields.',
+        {
+          type: 'object',
+          required: ['skill', 'endpoint'],
+          properties: { skill: { type: 'string' }, endpoint: { type: 'string' } },
+        },
+      ),
       spec('release.playbookDraft', 'Create or update a draft playbook directory and playbook.json.', {
         type: 'object',
         required: ['name'],
@@ -160,12 +184,12 @@ export class AgentTools {
       }),
       spec(
         'skilldocs.list',
-        'List available skill documents (the alva platform skill and Portfolio-Watch-Skill). Call this before building feeds, playbooks, or strategies.',
+        'List platform methodology manuals (the alva platform skill and Portfolio-Watch-Skill). These are how-to guides for feeds/playbooks/strategies — NOT data endpoint docs (use skills.doc for those).',
         { type: 'object', properties: {} },
       ),
       spec(
         'skilldocs.read',
-        'Read a skill document window (16k chars). Use offset to page through long files. file defaults to SKILL.md; reference files look like references/feed-sdk.md.',
+        'Read a methodology manual window (16k chars). Use offset to page through long files. file defaults to SKILL.md; reference files look like references/feed-sdk.md. For data endpoint parameter docs use skills.doc instead.',
         {
           type: 'object',
           required: ['skill'],
@@ -263,6 +287,21 @@ export class AgentTools {
         const found = catalog.skills.find((s) => s.name === skill);
         if (!found) throw new Error(`Unknown skill: ${skill}`);
         return found;
+      }
+      case 'skills.doc': {
+        const skill = reqString(input, 'skill');
+        // findEndpoint 顺带校验并把 path 形态归一为 file 名；错误信息会列出可用端点
+        const endpoint = findEndpoint(loadCatalog(), skill, reqString(input, 'endpoint'));
+        const docFile = path.join(CATALOG_DIR, 'docs', skill, `${endpoint.file}.md`);
+        try {
+          return { skill, endpoint: endpoint.file, doc: await fsp.readFile(docFile, 'utf8') };
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+          // 少数端点镜像时未抓到 doc——这是「禁猜参」规则的唯一例外场景
+          throw new Error(
+            `No mirrored doc exists for ${skill}/${endpoint.file} (mirror gap). As an exception, call it with minimal params and read the error response.`,
+          );
+        }
       }
       case 'release.playbookDraft':
         return this.releases.createDraft({

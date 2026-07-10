@@ -273,6 +273,16 @@ describe('server app', () => {
     expect(doc.content).toContain('Alva');
     expect(doc.size).toBeGreaterThan(0);
 
+    // 数据端点参数文档：data.call 前必读，防猜参 404
+    const endpointDoc = await app.inject({
+      method: 'POST',
+      url: '/api/tools/skills.doc',
+      payload: { skill: 'arrays-data-api-stock-screener', endpoint: 'basic-info-screener' },
+    });
+    const docData = endpointDoc.json<{ data: { doc: string; endpoint: string } }>().data;
+    expect(docData.endpoint).toBe('basic-info-screener');
+    expect(docData.doc).toContain('screener');
+
     const escape = await app.inject({
       method: 'POST',
       url: '/api/tools/skilldocs.read',
