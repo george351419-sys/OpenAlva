@@ -5,7 +5,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { openAlvaPaths, resolveOpenAlvaRoot } from '@openalva/alfs';
 import { createArraysRoutingFetch, type DataSource } from '@openalva/data';
-import { defaultHttpFetch, type HttpFetchImpl } from '@openalva/feed-runtime';
+import { defaultHttpFetch, runFeed, type HttpFetchImpl } from '@openalva/feed-runtime';
 import { CronService, SchedulerStore } from '@openalva/scheduler';
 import { AgentRunner } from './agentRunner.js';
 import { AgentTools } from './agentTools.js';
@@ -93,6 +93,42 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     return {
       playbooks: playbooks.map((pb) => ({ ...pb, views: views.get(user, pb.name) })),
     };
+  });
+
+  app.get('/api/explore/:name', async (req, reply) => {
+    const name = (req.params as { name: string }).name;
+    try {
+      const detail = await releases.detail(name);
+      return { ...detail, views: views.get(user, detail.name) };
+    } catch (err) {
+      const notFound =
+        (err as NodeJS.ErrnoException).code === 'ENOENT' ||
+        (err instanceof Error && err.message.includes('playbook name must be'));
+      if (!notFound) throw err; // 损坏的 playbook.json 等真实错误照常 500
+      return reply.code(404).send({ error: 'not found' });
+    }
+  });
+
+  // UDF invoke：live playbook 页经浏览器 SDK 以 owner 权限执行
+  // ~/playbooks/<playbook>/udf/<udf>.js（args 进 env.args），封套同 alva run
+  app.post('/api/udf/call', async (req, reply) => {
+    const body = objectBody(req.body);
+    const playbook = str(body['playbook'])?.trim().toLowerCase();
+    const udf = str(body['udf'])?.trim();
+    if (!playbook || !/^[a-z0-9][a-z0-9_-]{1,62}$/.test(playbook)) {
+      return reply.code(400).send({ error: 'invalid playbook name' });
+    }
+    if (!udf || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/.test(udf)) {
+      return reply.code(400).send({ error: 'invalid udf name' });
+    }
+    return runFeed({
+      root,
+      user,
+      entryPath: `~/playbooks/${playbook}/udf/${udf}.js`,
+      args: body['args'] ?? {},
+      httpFetch: feedHttpFetch,
+      timeoutMs: 60_000,
+    });
   });
 
   app.get('/artifacts/:id', async (req, reply) => {
@@ -225,7 +261,11 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     }
     if (!snapshot) return reply.code(404).send({ error: 'playbook has no release' });
     const html = await fsp.readFile(snapshot, 'utf8');
-    if (!req.headers['x-openalva-screenshot']) {
+    // 截图请求与详情页 iframe 预览（?preview=1）不算真实浏览
+    const isPreview =
+      !!req.headers['x-openalva-screenshot'] ||
+      (req.query as Record<string, unknown>)['preview'] !== undefined;
+    if (!isPreview) {
       views.increment(user, params.name.trim().toLowerCase());
     }
     return reply.type('text/html').send(html);
@@ -267,6 +307,24 @@ function str(value: unknown): string | undefined {
 function browserSdk(): string {
   return `
 (function () {
+  function playbookFromLocation() {
+    var m = location.pathname.match(/\\/u\\/[^/]+\\/playbooks\\/([^/]+)/);
+    return m ? m[1] : null;
+  }
+  async function udfCall(name, args) {
+    var playbook = playbookFromLocation();
+    if (!playbook) throw new Error("openalva.udf.call must run inside a live playbook page");
+    var resp = await fetch("/api/udf/call", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ playbook: playbook, udf: name, args: args || {} })
+    });
+    var envelope = await resp.json();
+    if (envelope.status !== "completed") {
+      throw new Error(envelope.error || "UDF " + name + " failed");
+    }
+    return envelope;
+  }
   class OpenAlvaClient {
     fs = {
       read: async ({ path }) => {
@@ -280,8 +338,11 @@ function browserSdk(): string {
         return envelope.data.content;
       }
     };
+    udf = { call: udfCall };
   }
   window.OpenAlva = { Client: OpenAlvaClient };
+  window.openalva = window.openalva || {};
+  window.openalva.udf = { call: udfCall };
 })();
 `.trimStart();
 }

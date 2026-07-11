@@ -218,6 +218,59 @@ export class ReleaseService {
     return out.sort((a, b) => b.updated_at - a.updated_at);
   }
 
+  /** Explore 详情：playbook 元数据 + README + 版本史 + 截图。 */
+  async detail(name: string): Promise<{
+    name: string;
+    author: string;
+    display_name: string;
+    description: string;
+    status: 'draft' | 'released';
+    latest_release: string | null;
+    live_url: string;
+    screenshot_url: string | null;
+    readme: string;
+    releases: PlaybookRelease[];
+    updated_at: number;
+  }> {
+    const clean = cleanName(name);
+    const dir = this.playbookDir(clean);
+    const playbook = JSON.parse(
+      await fs.readFile(path.join(dir, 'playbook.json'), 'utf8'),
+    ) as PlaybookJson;
+    const readme = await fs.readFile(path.join(dir, 'README.md'), 'utf8').catch(() => '');
+    let screenshotUrl: string | null = null;
+    if (playbook.latest_release) {
+      const shotFile = path.join(
+        this.root,
+        'pb-static',
+        this.user,
+        clean,
+        playbook.latest_release,
+        'screenshot.png',
+      );
+      const hasShot = await fs.access(shotFile).then(
+        () => true,
+        () => false,
+      );
+      if (hasShot) {
+        screenshotUrl = `/pb-static/${this.user}/${clean}/${playbook.latest_release}/screenshot.png`;
+      }
+    }
+    return {
+      name: playbook.name,
+      author: this.user,
+      display_name: playbook.display_name,
+      description: playbook.description,
+      status: playbook.status,
+      latest_release: playbook.latest_release,
+      live_url: `/u/${this.user}/playbooks/${clean}`,
+      screenshot_url: screenshotUrl,
+      readme,
+      releases: [...playbook.releases].reverse(),
+      updated_at: playbook.draft.updated_at,
+    };
+  }
+
   async latestSnapshot(name: string): Promise<string | null> {
     const clean = cleanName(name);
     const jsonFile = path.join(this.playbookDir(clean), 'playbook.json');

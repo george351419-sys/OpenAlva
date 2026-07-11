@@ -85,12 +85,14 @@
   - [x] 2026-07-11 完成 screenshot：`playwright-core` + 本机 Chrome（channel:'chrome'，不下载 Chromium）。release 成功后 best-effort 截图到快照目录（无 Chrome/加载失败不阻塞发布）；`screenshot {url}` 工具供 agent 自检视觉产出（仅限本机 URL，PNG 经 /artifacts/:id.png 提供）。实测发布 demo playbook 生成 12KB 截图。
 - [ ] Explore 门户 + 详情页（Design-Brief §4.3/4.4）；浏览数统计。
   - [x] 2026-07-10 部分完成：`GET /api/explore` 列出已发布 playbook（扫描 `~/playbooks/*/playbook.json` 有 `latest_release` 的），web 侧 Explore 页卡片网格（名称/描述/版本/live 链接）。
-  - [x] 2026-07-11 追加：Explore 卡片带 release 截图（screenshot_url）与浏览数（`playbook_views` 表，live 页每次打开 +1，截图访问经 x-openalva-screenshot 头豁免计数）。仅剩详情页待补。
+  - [x] 2026-07-11 追加：Explore 卡片带 release 截图（screenshot_url）与浏览数（`playbook_views` 表，live 页每次打开 +1，截图访问经 x-openalva-screenshot 头豁免计数）。
+  - [x] 2026-07-11 详情页完成：`GET /api/explore/:name`（元数据+README+版本史+截图+浏览数），web 卡片点击进详情（截图/iframe 预览、README、版本历史、live 按钮）。**Phase 4 验收面到齐。**
 - **验收**：crypto-top5-watch 的 index.html（仅改 FEED_ROOT 与 SDK 名）本地发布 → URL 打开渲染真数据 → lint 通过 → Explore 出现卡片带截图。
 
 ## 7. Phase 5 — MVP 收口：Portfolio-Watch 种子内容（2-3 天）
 
 - [ ] P1 前段三件套（spec §7.1 已定）：UDF 注册与 invoke（`window.openalva.udf.call`）、本地通知渠道（macOS 系统通知 + 可选 Telegram bot，二选一先 macOS）、alpi 等价原语（小型 Claude 调用，一行叙事）。
+  - [x] 2026-07-11 三件套完成：**UDF** —— `POST /api/udf/call` 以 owner 权限跑 `~/playbooks/<name>/udf/<udf>.js`（args 进 env.args，Arrays 路由，封套同 alva run），浏览器 SDK 暴露 `window.openalva.udf.call`（live URL 推导 playbook 名），名称正则封路径注入；**本地通知** —— cron run 成功且 push_notify 时读 feed 的 `notify/message @last`，按记录 date 去重（cronjobs.last_notify_date 水位），`<|SKIP_NOTIFICATION|>`/空 body 静默，默认 osascript macOS 系统通知（Notifier 可注入，测试覆盖去重/静默/水位）；**alpi** —— 沙箱模块 `@alva/pi`（Agent/Type/getModel 最小子集），`Agent.ask()` 单结果 + tools 循环，key 走 env 或 config.json（deepseek 优先/anthropic 兜底），HTTP 走沙箱 httpFetch（可 mock），tracker 包裹保证 drain 等待。
 - [ ] 经 Chat 用 Portfolio-Watch-Skill 构建 2-3 个股票组合 watch（如：美股 Top10、半导体组合、crypto+股票混合）；pro-gated 信号源验证优雅降级。
 - **验收 = Spec §7.1 MVP 验收**：一句话 → 真数据 playbook → cron 自刷 → URL 可开 → Explore 可见；且 Portfolio-Watch-Skill 核心构建流程（profile feed + watch feed + 多 tab 界面 + release + UDF 编辑持仓 + 一条真实通知）全部跑通。
 

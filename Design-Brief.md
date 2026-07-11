@@ -65,6 +65,7 @@ Token 源文件：`design-tokens.css`（187 行），原样入库，不改值。
 
 - 顶部信息栏：标题+作者+版本号+changelog 入口；右侧「Remix」主按钮（`--main-m1` 实底、圆角 `--radius-btn-l`）+「Open」次按钮（白底 `--line-l3` 边框）。
 - 主体：iframe 全宽嵌入 release HTML 快照；下方 README 折叠区。
+- **2026-07-11 实现登记（fallback）**：一期已实现标题+作者+版本+浏览数、Open 次按钮、iframe 全宽嵌入（live URL 带 `?preview=1`，不计浏览数）、README `<details>` 折叠区、版本历史列表（changelog 入口的展开形态）。「Remix」主按钮随 Remix 流程留二期（Phase 6），届时补齐。
 
 ### 4.5 Agent 工作区（二期）与账户菜单
 

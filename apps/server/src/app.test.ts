@@ -169,6 +169,64 @@ describe('server app', () => {
     await app.close();
   });
 
+  it('invokes playbook UDFs through /api/udf/call with owner permissions', async () => {
+    const app = await buildApp({ root: tmpDir, user: 'george' });
+    await app.inject({
+      method: 'POST',
+      url: '/api/tools/release.playbookDraft',
+      payload: { name: 'udf-demo' },
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/api/tools/fs.write',
+      payload: {
+        path: '~/playbooks/udf-demo/udf/save.js',
+        content: `
+          const alfs = require("alfs");
+          const env = require("env");
+          (async () => {
+            await alfs.writeFile(
+              "/alva/home/" + env.username + "/memory/udf-args.json",
+              JSON.stringify(env.args),
+            );
+          })();
+        `,
+      },
+    });
+
+    const call = await app.inject({
+      method: 'POST',
+      url: '/api/udf/call',
+      payload: { playbook: 'udf-demo', udf: 'save', args: { action: 'add', symbol: 'NVDA' } },
+    });
+    expect(call.statusCode).toBe(200);
+    expect(call.json()).toMatchObject({ status: 'completed' });
+
+    const saved = await app.inject({
+      method: 'POST',
+      url: '/api/tools/fs.read',
+      payload: { path: '~/memory/udf-args.json' },
+    });
+    expect(JSON.parse(saved.json<{ data: { content: string } }>().data.content)).toEqual({
+      action: 'add',
+      symbol: 'NVDA',
+    });
+
+    // 名称校验：路径注入面直接 400
+    const bad = await app.inject({
+      method: 'POST',
+      url: '/api/udf/call',
+      payload: { playbook: '../escape', udf: 'save', args: {} },
+    });
+    expect(bad.statusCode).toBe(400);
+
+    // 浏览器 SDK 暴露 window.openalva.udf.call
+    const sdk = await app.inject({ method: 'GET', url: '/openalva/v1/client.js' });
+    expect(sdk.body).toContain('openalva.udf');
+
+    await app.close();
+  }, 30_000);
+
   it('lists available models based on configured keys', async () => {
     const both = await buildApp({
       root: tmpDir,
@@ -456,13 +514,15 @@ describe('server app', () => {
     });
     expect(forced.json()).toMatchObject({ success: true, data: { release: { version: 'v2' } } });
 
-    // 再开一次 live 页 → 浏览数累计到 Explore；截图请求（带标记头）不计数
+    // 再开一次 live 页 → 浏览数累计到 Explore；截图请求（带标记头）与
+    // 详情页 iframe 预览（?preview=1）都不计数
     await app.inject({ method: 'GET', url: '/u/george/playbooks/btc-watch' });
     await app.inject({
       method: 'GET',
       url: '/u/george/playbooks/btc-watch',
       headers: { 'x-openalva-screenshot': '1' },
     });
+    await app.inject({ method: 'GET', url: '/u/george/playbooks/btc-watch?preview=1' });
     // 非法 playbook 名 → 404 而非 500
     const badName = await app.inject({ method: 'GET', url: '/u/george/playbooks/UP PER' });
     expect(badName.statusCode).toBe(404);
@@ -480,6 +540,18 @@ describe('server app', () => {
         },
       ],
     });
+
+    // Explore 详情
+    const detail = await app.inject({ method: 'GET', url: '/api/explore/btc-watch' });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json()).toMatchObject({
+      name: 'btc-watch',
+      latest_release: 'v2',
+      views: 2,
+      releases: [{ version: 'v2' }, { version: 'v1' }],
+    });
+    const missing = await app.inject({ method: 'GET', url: '/api/explore/nope' });
+    expect(missing.statusCode).toBe(404);
 
     await app.close();
   });

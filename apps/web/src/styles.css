@@ -507,6 +507,74 @@ button {
   font-size: 12px;
 }
 
+button.explore-card {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m, 16px);
+}
+
+.detail-header h1 {
+  margin: 0;
+}
+
+.detail-header .live-link {
+  margin-left: auto;
+  text-decoration: none;
+}
+
+.detail-shot,
+.detail-preview {
+  width: 100%;
+  max-width: 960px;
+  border: 1px solid var(--line-l12, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-ct-l, 8px);
+  background: white;
+}
+
+.detail-preview {
+  height: 520px;
+}
+
+.detail-readme summary {
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 4px 0;
+}
+
+.detail-readme pre {
+  max-width: 960px;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--line-l12, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-ct-l, 8px);
+  background: var(--grey-g01, #fafafa);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.detail-readme h2,
+.detail-releases h2 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.detail-release-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-s, 12px);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line-l12, rgba(0, 0, 0, 0.08));
+  font-size: 13px;
+}
+
 .conversation > .tool-card {
   margin-left: 42px;
   max-width: 760px;

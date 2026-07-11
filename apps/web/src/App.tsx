@@ -402,9 +402,17 @@ export function App(): ReactElement {
   );
 }
 
+interface ExploreDetail extends ExplorePlaybook {
+  author: string;
+  status: string;
+  readme: string;
+  releases: { version: string; changelog: string; created_at: number }[];
+}
+
 function ExploreView(): ReactElement {
   const [playbooks, setPlaybooks] = useState<ExplorePlaybook[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [detail, setDetail] = useState<ExploreDetail | null>(null);
 
   useEffect(() => {
     void fetchJson<{ playbooks: ExplorePlaybook[] }>('/api/explore')
@@ -412,6 +420,61 @@ function ExploreView(): ReactElement {
       .catch(() => undefined)
       .finally(() => setLoaded(true));
   }, []);
+
+  async function openDetail(name: string): Promise<void> {
+    const loadedDetail = await fetchJson<ExploreDetail>(`/api/explore/${name}`).catch(() => null);
+    if (loadedDetail) setDetail(loadedDetail);
+  }
+
+  if (detail) {
+    return (
+      <section className="explore">
+        <header className="explore-header detail-header">
+          <button className="secondary-button" onClick={() => setDetail(null)}>
+            ← 返回
+          </button>
+          <div>
+            <h1>{detail.display_name}</h1>
+            <p>
+              @{detail.author} · {detail.latest_release} · {detail.views} 次浏览 ·{' '}
+              {new Date(detail.updated_at).toLocaleString()}
+            </p>
+          </div>
+          <a
+            className="secondary-button live-link"
+            href={detail.live_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            打开 Live 页
+          </a>
+        </header>
+        {/* Design-Brief §4.4：主体 iframe 全宽嵌入；?preview=1 不计浏览数 */}
+        <iframe
+          className="detail-preview"
+          src={`${detail.live_url}?preview=1`}
+          title={detail.display_name}
+        />
+        {detail.description ? <p className="explore-desc">{detail.description}</p> : null}
+        {detail.readme.trim() ? (
+          <details className="detail-readme">
+            <summary>README</summary>
+            <pre>{detail.readme}</pre>
+          </details>
+        ) : null}
+        <div className="detail-releases">
+          <h2>版本历史</h2>
+          {detail.releases.map((r) => (
+            <div key={r.version} className="detail-release-row">
+              <code>{r.version}</code>
+              <span>{r.changelog}</span>
+              <span className="explore-meta">{new Date(r.created_at).toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="explore">
@@ -428,12 +491,10 @@ function ExploreView(): ReactElement {
       ) : (
         <div className="explore-grid">
           {playbooks.map((pb) => (
-            <a
+            <button
               key={pb.name}
               className="explore-card"
-              href={pb.live_url}
-              target="_blank"
-              rel="noreferrer"
+              onClick={() => void openDetail(pb.name)}
             >
               {pb.screenshot_url ? (
                 <img className="explore-shot" src={pb.screenshot_url} alt={pb.display_name} />
@@ -444,7 +505,7 @@ function ExploreView(): ReactElement {
                 {pb.latest_release} · {new Date(pb.updated_at).toLocaleDateString()} ·{' '}
                 {pb.views} 次浏览
               </span>
-            </a>
+            </button>
           ))}
         </div>
       )}
