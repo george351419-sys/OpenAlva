@@ -89,6 +89,57 @@ describe('deploy 存储与手动 trigger', () => {
     expect(store.get(job.id)!.consecutive_failures).toBe(2);
   });
 
+  it('push_notify fanout：按 date 去重投递，SKIP 哨兵静默，水位推进', async () => {
+    const notifyFeedSrc = (d: number, body: string): string => `
+      const { Feed, feedPath, makeDoc, str } = require("@alva/feed");
+      const feed = new Feed({ path: feedPath("alerts") });
+      feed.def("notify", { message: makeDoc("Notification", "alerts", [str("title"), str("body")]) });
+      (async () => {
+        await feed.run(async (ctx) => {
+          await ctx.self.ts("notify", "message").append([
+            { date: ${d}, title: "Alert", body: ${JSON.stringify(body)} },
+          ]);
+        });
+      })();
+    `;
+    const delivered: { title: string; body: string }[] = [];
+    const svc = new CronService(store, root, {
+      notifier: async (n) => {
+        delivered.push(n);
+      },
+    });
+    const job = store.create({
+      name: 'alerts',
+      user: 'alice',
+      entryPath: '~/feeds/alerts/v1/src/index.js',
+      cron: '0 0 31 2 *',
+      pushNotify: true,
+    });
+    const runWith = async (d: number, body: string): Promise<void> => {
+      await alfs.writeFile('~/feeds/alerts/v1/src/index.js', notifyFeedSrc(d, body));
+      await svc.execute(job.id, 'manual');
+    };
+
+    // 第一次 run：投递一条真实告警
+    await runWith(1000, 'ETH -3.2σ 异动');
+    expect(delivered).toEqual([{ title: 'Alert', body: 'ETH -3.2σ 异动' }]);
+    expect(store.get(job.id)!.last_notify_date).toBe(1000);
+
+    // 同一条记录（同 date 桶 REPLACE 语义）再跑：不重复投递
+    await runWith(1000, 'ETH -3.2σ 异动');
+    expect(delivered).toHaveLength(1);
+
+    // 静默运行：SKIP 哨兵不投递，但水位照常推进
+    await runWith(2000, '<|SKIP_NOTIFICATION|> quiet');
+    expect(delivered).toHaveLength(1);
+    expect(store.get(job.id)!.last_notify_date).toBe(2000);
+
+    // 新告警：正常投递
+    await runWith(3000, 'BTC 突破位');
+    expect(delivered).toHaveLength(2);
+    expect(delivered[1]!.body).toBe('BTC 突破位');
+  }, 60_000);
+
   it('reconcile 注册 active 任务、剔除暂停任务', () => {
     const job = store.create({
       name: 'tick',

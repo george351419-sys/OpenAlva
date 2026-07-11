@@ -16,6 +16,8 @@ export interface CronJob {
   max_heap_size_mb: number | null;
   status: 'active' | 'paused' | 'deleted';
   consecutive_failures: number;
+  /** 通知 fanout 去重水位：只投递 date 大于此值的 notify 行 */
+  last_notify_date: number;
   created_at: number;
   updated_at: number;
 }
@@ -49,6 +51,7 @@ export class SchedulerStore {
         max_heap_size_mb INTEGER,
         status TEXT NOT NULL DEFAULT 'active',
         consecutive_failures INTEGER NOT NULL DEFAULT 0,
+        last_notify_date INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
@@ -65,6 +68,13 @@ export class SchedulerStore {
       );
       CREATE INDEX IF NOT EXISTS idx_cron_runs_job ON cron_runs (cronjob_id, id DESC);
     `);
+    // 老库补列（新库的 CREATE TABLE IF NOT EXISTS 不会加列）
+    try {
+      this.db.exec(`ALTER TABLE cronjobs ADD COLUMN last_notify_date INTEGER NOT NULL DEFAULT 0`);
+    } catch (err) {
+      // 只吞「已迁移过」；其他错误如实抛出
+      if (!String((err as Error).message).includes('duplicate column')) throw err;
+    }
   }
 
   create(input: {
@@ -139,6 +149,10 @@ export class SchedulerStore {
         .prepare(`UPDATE cronjobs SET consecutive_failures = 0 WHERE id = ?`)
         .run(run.cronjob_id);
     }
+  }
+
+  setLastNotifyDate(id: number, date: number): void {
+    this.db.prepare(`UPDATE cronjobs SET last_notify_date = ? WHERE id = ?`).run(date, id);
   }
 
   runs(cronjobId: number, limit = 20): CronRun[] {

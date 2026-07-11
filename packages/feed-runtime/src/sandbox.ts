@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Alfs } from '@openalva/alfs';
+import { createAlpiModule } from './alpiModule.js';
 import { createFeedModule } from './feedSdk.js';
 import type { AsyncTracker } from './tracker.js';
 
@@ -42,6 +43,17 @@ export function buildRequire(opts: SandboxOptions): (name: string) => unknown {
   const modules = new Map<string, unknown>();
 
   modules.set('@alva/feed', createFeedModule({ root, user, tracker }));
+
+  // alpi：确定性 pipeline 内的固定 LLM 调用（一行叙事/TLDR 等）
+  modules.set(
+    '@alva/pi',
+    createAlpiModule({
+      root,
+      tracker,
+      httpFetch: opts.httpFetch,
+      ...(opts.secretValues ? { secretValues: opts.secretValues } : {}),
+    }),
+  );
 
   modules.set('env', {
     userId: '1',
@@ -103,7 +115,7 @@ export function buildRequire(opts: SandboxOptions): (name: string) => unknown {
     }
     throw new Error(
       `Module not available in OpenAlva feed runtime: require("${name}"). ` +
-        `Available: @alva/feed, alfs, env, secret-manager, net/http`,
+        `Available: @alva/feed, @alva/pi, alfs, env, secret-manager, net/http`,
     );
   };
 }
