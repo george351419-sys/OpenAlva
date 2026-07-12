@@ -6,7 +6,7 @@ OpenAlva is a local-first, open-source recreation of the core Alva product idea:
 
 The project is intentionally not a Claude Code or Codex wrapper. Claude Code and Codex are coding agents that operate over a repository. OpenAlva is an application runtime: it has its own web UI, filesystem model, feed runtime, data-source layer, scheduler, release system, and browser SDK. A model is only one replaceable component inside the product.
 
-> Current status: Phase 0-2 are implemented, Phase 3 chat and agent foundation is partially implemented, and Phase 4 has a minimal release surface. The MVP loop is not complete yet: screenshot/lint gates, Explore, chart artifacts, full blueprint loading, Portfolio-Watch seed playbooks, Altra-lite, Remix, and native data drivers remain in progress.
+> Current status: the core Phase 0-4 loop is now in place: Chat/Agent tool use, ALFS/feed runtime, cron scheduling, release/lint/screenshot, Explore, artifact publishing, UDFs, local notifications, and `@alva/pi`. Phase 5 now includes the `seed.portfolioWatch` compatibility entry point, which can generate and publish a Portfolio-Watch seed playbook. Next work focuses on 2-3 named portfolio templates, Altra-lite, Remix, and native data drivers.
 
 ## Why OpenAlva Exists
 

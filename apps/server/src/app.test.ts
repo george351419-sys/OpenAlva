@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { initOpenAlvaRoot } from '@openalva/alfs';
 import type { DataCallInput, ArraysEnvelope, DataSource } from '@openalva/data';
+import type { HttpFetchImpl } from '@openalva/feed-runtime';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import { openDatabase, SCHEMA_VERSION } from './db.js';
@@ -409,6 +410,115 @@ describe('server app', () => {
     await app.close();
   });
 
+  it('seeds the Portfolio Watch compatibility playbook end to end', async () => {
+    const app = await buildApp({
+      root: tmpDir,
+      user: 'george',
+      feedHttpFetch: fakeKlineFetch,
+    });
+
+    const specs = await app.inject({ method: 'GET', url: '/api/tools' });
+    expect(specs.json<{ tools: { name: string }[] }>().tools.map((t) => t.name)).toContain(
+      'seed.portfolioWatch',
+    );
+
+    const seeded = await app.inject({
+      method: 'POST',
+      url: '/api/tools/seed.portfolioWatch',
+      payload: {
+        playbookName: 'portfolio-watch',
+        displayName: 'Portfolio Watch',
+        holdings: [
+          { symbol: 'NVDA', name: 'NVIDIA', sector: 'Semiconductors', weight: 0.5 },
+          { symbol: 'SMH', name: 'Semiconductor ETF', sector: 'Semiconductors', weight: 0.3 },
+          { symbol: 'AAPL', name: 'Apple', sector: 'Hardware', weight: 0.2 },
+        ],
+      },
+    });
+    expect(seeded.statusCode).toBe(200);
+    expect(seeded.json()).toMatchObject({
+      success: true,
+      data: {
+        playbook: 'portfolio-watch',
+        liveUrl: '/u/george/playbooks/portfolio-watch',
+        releaseVersion: 'v1',
+        runs: {
+          profile: { status: 'completed', error: null },
+          watch: { status: 'completed', error: null },
+        },
+      },
+    });
+
+    const config = await app.inject({
+      method: 'POST',
+      url: '/api/tools/fs.read',
+      payload: { path: '~/feeds/pw-config/v1/holdings.json' },
+    });
+    expect(JSON.parse(config.json<{ data: { content: string } }>().data.content).holdings).toHaveLength(
+      3,
+    );
+
+    const overview = await app.inject({
+      method: 'POST',
+      url: '/api/tools/fs.read',
+      payload: { path: '~/feeds/pw-watch/v1/data/watch/overview/@last/1' },
+    });
+    expect(JSON.parse(overview.json<{ data: { content: string } }>().data.content)[0]).toMatchObject({
+      holding_count: 3,
+    });
+
+    const notify = await app.inject({
+      method: 'POST',
+      url: '/api/tools/fs.read',
+      payload: { path: '~/feeds/pw-watch/v1/data/notify/message/@last/1' },
+    });
+    expect(JSON.parse(notify.json<{ data: { content: string } }>().data.content)[0]).toMatchObject({
+      title: 'Portfolio Watch',
+    });
+
+    const live = await app.inject({ method: 'GET', url: '/u/george/playbooks/portfolio-watch' });
+    expect(live.statusCode).toBe(200);
+    expect(live.body).toContain('Edit Watchlist');
+    expect(live.body).toContain('Theory');
+    expect(live.body).toContain('Formulas');
+
+    const explore = await app.inject({ method: 'GET', url: '/api/explore' });
+    expect(explore.json()).toMatchObject({
+      playbooks: [
+        {
+          name: 'portfolio-watch',
+          latest_release: 'v1',
+          live_url: '/u/george/playbooks/portfolio-watch',
+        },
+      ],
+    });
+
+    const udf = await app.inject({
+      method: 'POST',
+      url: '/api/udf/call',
+      payload: {
+        playbook: 'portfolio-watch',
+        udf: 'updateWatchlist',
+        args: { action: 'add', symbol: 'AMD', sector: 'Semiconductors' },
+      },
+    });
+    expect(udf.statusCode).toBe(200);
+    expect(udf.json()).toMatchObject({ status: 'completed' });
+
+    const updated = await app.inject({
+      method: 'POST',
+      url: '/api/tools/fs.read',
+      payload: { path: '~/feeds/pw-config/v1/holdings.json' },
+    });
+    expect(
+      JSON.parse(updated.json<{ data: { content: string } }>().data.content).holdings.map(
+        (h: { symbol: string }) => h.symbol,
+      ),
+    ).toContain('AMD');
+
+    await app.close();
+  }, 45_000);
+
   it('publishes a playbook snapshot and serves live/static URLs plus browser SDK', async () => {
     const app = await buildApp({ root: tmpDir, user: 'george' });
 
@@ -592,6 +702,32 @@ class StubDataSource implements DataSource {
     return { success: true, data: this.rows };
   }
 }
+
+const fakeKlineFetch: HttpFetchImpl = async (url) => {
+  const parsed = new URL(url);
+  const symbol = parsed.searchParams.get('symbol') ?? 'SPY';
+  const limit = Number(parsed.searchParams.get('limit') ?? 60);
+  const seed = symbol.split('').reduce((sum, c) => sum + c.charCodeAt(0), 0);
+  const rows = Array.from({ length: limit }, (_, i) => {
+    const t = 1_700_000_000 + i * 86_400;
+    const base = 80 + (seed % 120);
+    const trend = i * 0.35;
+    const wave = Math.sin((i + seed) / 4) * 2;
+    return {
+      time_close: t,
+      price_close: base + trend + wave,
+      volume: 1_000_000 + seed * 100 + i * 1000,
+    };
+  });
+  const body = JSON.stringify({ success: true, data: rows });
+  return {
+    status: 200,
+    ok: true,
+    headers: {},
+    text: async () => body,
+    json: async () => JSON.parse(body),
+  };
+};
 
 /** 满足 design-contract 核心规则的最小 playbook HTML。 */
 function compliantPlaybookHtml(title: string): string {

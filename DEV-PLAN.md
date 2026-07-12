@@ -91,9 +91,11 @@
 
 ## 7. Phase 5 — MVP 收口：Portfolio-Watch 种子内容（2-3 天）
 
-- [ ] P1 前段三件套（spec §7.1 已定）：UDF 注册与 invoke（`window.openalva.udf.call`）、本地通知渠道（macOS 系统通知 + 可选 Telegram bot，二选一先 macOS）、alpi 等价原语（小型 Claude 调用，一行叙事）。
+- [x] P1 前段三件套（spec §7.1 已定）：UDF 注册与 invoke（`window.openalva.udf.call`）、本地通知渠道（macOS 系统通知 + 可选 Telegram bot，二选一先 macOS）、alpi 等价原语（小型 Claude 调用，一行叙事）。
   - [x] 2026-07-11 三件套完成：**UDF** —— `POST /api/udf/call` 以 owner 权限跑 `~/playbooks/<name>/udf/<udf>.js`（args 进 env.args，Arrays 路由，封套同 alva run），浏览器 SDK 暴露 `window.openalva.udf.call`（live URL 推导 playbook 名），名称正则封路径注入；**本地通知** —— cron run 成功且 push_notify 时读 feed 的 `notify/message @last`，按记录 date 去重（cronjobs.last_notify_date 水位），`<|SKIP_NOTIFICATION|>`/空 body 静默，默认 osascript macOS 系统通知（Notifier 可注入，测试覆盖去重/静默/水位）；**alpi** —— 沙箱模块 `@alva/pi`（Agent/Type/getModel 最小子集），`Agent.ask()` 单结果 + tools 循环，key 走 env 或 config.json（deepseek 优先/anthropic 兜底），HTTP 走沙箱 httpFetch（可 mock），tracker 包裹保证 drain 等待。
 - [ ] 经 Chat 用 Portfolio-Watch-Skill 构建 2-3 个股票组合 watch（如：美股 Top10、半导体组合、crypto+股票混合）；pro-gated 信号源验证优雅降级。
+  - [x] 2026-07-12 平台验收入口完成：新增 `seed.portfolioWatch` 工具，按 Portfolio-Watch-Skill 方法论生成 `pw-config` / `pw-profile` / `pw-watch`，创建 profile/watch cron（watch 开启 push_notify），立即触发首轮 run，发布四 tab playbook（Watch / Incident / Theory / Formulas）并进入 Explore；playbook 内置 `updateWatchlist` UDF，可在 UI/`/api/udf/call` 中编辑持仓；profile feed 对 Arrays 取数失败做 deterministic fallback，pro-gated/缺省数据源可优雅降级。测试 `server app > seeds the Portfolio Watch compatibility playbook end to end` 覆盖 config/profile/watch/notify/release/Explore/UDF。
+  - [ ] 内容模板扩展：基于同一 seed 能力预置 2-3 个命名组合（如 Top10、半导体、crypto+股票混合），并在真实 Arrays 路由环境下记录一次人工验收截图。
 - **验收 = Spec §7.1 MVP 验收**：一句话 → 真数据 playbook → cron 自刷 → URL 可开 → Explore 可见；且 Portfolio-Watch-Skill 核心构建流程（profile feed + watch feed + 多 tab 界面 + release + UDF 编辑持仓 + 一条真实通知）全部跑通。
 
 ## 8. Phase 6 — 二期（规划）

@@ -503,6 +503,7 @@ function systemPrompt(): string {
     '- ALFS ts(group, doc).append(rows): rows sharing one date replace that whole bucket; different dates coexist; @last/N reads the newest N records.',
     '- data/ mounts are only writable through ts append, never plain fs.write.',
     '- Feeds cannot trigger their own recompute; UI actions write config flags read on the next scheduled run; the owner can deploy.trigger manually.',
+    '- Portfolio-Watch-Skill seed acceptance has a dedicated tool: seed.portfolioWatch. Use it when the user asks for the Phase 5 seed Portfolio Watch or Spec 7.1 compatibility playbook.',
     '- Playbook flow: release.playbookDraft → write ~/playbooks/<name>/index.html (link /design-system/v1/design-system.css and the browser SDK /openalva/v1/client.js; wrap content in <div class="playbook-container">) → release.lint and fix ALL violations → release.playbook (refuses on lint violations) → live at /u/<user>/playbooks/<name>. Verify the rendered page with the screenshot tool.',
     '- One-off charts or visual explainers: artifact.publish {title, html} returns a URL that renders inline as an iframe card — prefer this for chart answers.',
     '',
@@ -523,6 +524,29 @@ async function runDeterministicAgent(
 ): Promise<AgentResponse> {
   const lower = message.toLowerCase();
   const wantsBuild = /playbook|监控|构建|创建|帮我建|build/.test(lower);
+  const wantsPortfolioWatchSeed =
+    /portfolio[-\s]?watch|portfolio watch|种子|兼容性验收|phase 5/.test(lower) && wantsBuild;
+  if (wantsPortfolioWatchSeed) {
+    const toolCallId = crypto.randomUUID();
+    const input = {
+      playbookName: 'portfolio-watch',
+      displayName: 'Portfolio Watch',
+    };
+    emit('tool_start', { id: toolCallId, name: 'seed.portfolioWatch', input });
+    const envelope = await tools.execute('seed.portfolioWatch', input);
+    emit('tool_result', { id: toolCallId, name: 'seed.portfolioWatch', input, envelope });
+    if (!envelope.success) {
+      return {
+        content: `Portfolio Watch 种子 playbook 构建失败：${envelope.error?.message ?? 'unknown error'}`,
+        metadata: { route: 'portfolio-watch-seed-fallback', tool_error: envelope.error },
+      };
+    }
+    const data = envelope.data as { liveUrl?: string | null; releaseVersion?: string | null };
+    return {
+      content: `Portfolio Watch 种子 playbook 已生成并发布：${data.liveUrl ?? '/u/george/playbooks/portfolio-watch'}（${data.releaseVersion ?? 'draft'}）。它包含 config/profile/watch feeds、四 tab 界面、UDF 编辑持仓和通知 sidecar。`,
+      metadata: { route: 'portfolio-watch-seed-fallback' },
+    };
+  }
   if (wantsBuild) {
     return {
       content:

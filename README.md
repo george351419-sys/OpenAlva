@@ -6,7 +6,7 @@ OpenAlva 是一个 local-first 的开源金融 agent 系统，目标是复刻 al
 
 它不是 Claude Code 或 Codex 的套壳。Claude Code / Codex 是面向代码仓库的通用 coding agent；OpenAlva 是一个完整的金融工作流应用运行时。模型只是其中一个可替换组件，系统本身还包含 Web UI、ALFS 文件系统、feed runtime、数据源适配层、调度器、release 系统和浏览器 SDK。
 
-> 当前状态：Phase 0-2 已完成；Phase 3 的 Chat/Agent 主链路部分完成；Phase 4 已有最小发布面。MVP 闭环尚未完成，仍待补 screenshot/lint 门禁、Explore 门户、chart artifact、完整 blueprint 加载、Portfolio-Watch 种子 playbook、Altra-lite、Remix 和 native 数据驱动。
+> 当前状态：Phase 0-4 的核心链路已打通：Chat/Agent 工具调用、ALFS/feed runtime、cron 调度、release/lint/screenshot、Explore 门户、artifact 发布、UDF、本地通知与 `@alva/pi` 已落地。Phase 5 已新增 `seed.portfolioWatch` 兼容验收入口，可生成并发布 Portfolio-Watch 种子 playbook；后续重点是扩展 2-3 个命名组合模板、Altra-lite、Remix 和 native 数据驱动。
 
 ## 项目为什么存在
 
@@ -506,4 +506,3 @@ OpenAlva 按从底向上的顺序构建：
 4. 最后补更深的平台能力：Altra-lite、Remix、native data drivers、notifications、workspace tabs。
 
 核心约束是：每个看起来很酷的 UI 功能，都应该落在真实的本地运行时原语上。UI 里出现的 playbook 应该对应真实文件；屏幕上的数据应该能追溯到 feed 或 tool call；发布出去的页面应该有不可变快照。
-

@@ -11,6 +11,7 @@ import {
 } from '@openalva/data';
 import { runFeed, type HttpFetchImpl } from '@openalva/feed-runtime';
 import type { CronService, SchedulerStore } from '@openalva/scheduler';
+import { PortfolioWatchSeeder } from './portfolioWatchSeed.js';
 import { ReleaseService } from './releaseService.js';
 import { captureScreenshot } from './screenshotService.js';
 import { SkillDocs } from './skillDocs.js';
@@ -55,12 +56,20 @@ export class AgentTools {
   private readonly dataSource: DataSource;
   private readonly releases: ReleaseService;
   private readonly skillDocs: SkillDocs;
+  private readonly portfolioWatchSeeder: PortfolioWatchSeeder;
 
   constructor(private readonly opts: AgentToolsOptions) {
     this.alfs = new Alfs(opts.root, opts.user);
     this.dataSource = opts.dataSource ?? new ArraysViaAlvaSource();
     this.releases = opts.releases ?? new ReleaseService(opts.root, opts.user);
     this.skillDocs = new SkillDocs(opts.repoRoot);
+    this.portfolioWatchSeeder = new PortfolioWatchSeeder({
+      root: opts.root,
+      user: opts.user,
+      schedulerStore: opts.schedulerStore,
+      cronService: opts.cronService,
+      releases: this.releases,
+    });
   }
 
   specs(): ToolSpec[] {
@@ -244,6 +253,35 @@ export class AgentTools {
           },
         },
       ),
+      spec(
+        'seed.portfolioWatch',
+        'Build the MVP seed Portfolio Watch playbook from Portfolio-Watch-Skill methodology: config feed, profile feed, watch feed, four-tab UI, UDF watchlist editor, cron deploys, notify sidecar, and release.',
+        {
+          type: 'object',
+          properties: {
+            playbookName: { type: 'string' },
+            displayName: { type: 'string' },
+            description: { type: 'string' },
+            profileCron: { type: 'string' },
+            watchCron: { type: 'string' },
+            trigger: { type: 'boolean' },
+            release: { type: 'boolean' },
+            holdings: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['symbol'],
+                properties: {
+                  symbol: { type: 'string' },
+                  name: { type: 'string' },
+                  sector: { type: 'string' },
+                  weight: { type: 'number' },
+                },
+              },
+            },
+          },
+        },
+      ),
     ];
   }
 
@@ -366,6 +404,19 @@ export class AgentTools {
         );
       case 'artifact.publish':
         return this.publishArtifact(reqString(input, 'title'), reqString(input, 'html'));
+      case 'seed.portfolioWatch':
+        return this.portfolioWatchSeeder.seed({
+          ...(typeof input['playbookName'] === 'string'
+            ? { playbookName: input['playbookName'] }
+            : {}),
+          ...(typeof input['displayName'] === 'string' ? { displayName: input['displayName'] } : {}),
+          ...(typeof input['description'] === 'string' ? { description: input['description'] } : {}),
+          ...(typeof input['profileCron'] === 'string' ? { profileCron: input['profileCron'] } : {}),
+          ...(typeof input['watchCron'] === 'string' ? { watchCron: input['watchCron'] } : {}),
+          ...(typeof input['trigger'] === 'boolean' ? { trigger: input['trigger'] } : {}),
+          ...(typeof input['release'] === 'boolean' ? { release: input['release'] } : {}),
+          ...(Array.isArray(input['holdings']) ? { holdings: input['holdings'] } : {}),
+        });
       default:
         return this.executeDeploy(name, input);
     }
